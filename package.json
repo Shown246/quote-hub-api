@@ -1,0 +1,57 @@
+{
+  "name": "quote-hub-api",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Quote-Hub API modular monolith",
+  "main": "dist/app/server.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx watch src/app/server.ts",
+    "test": "vitest run",
+    "seed": "tsx prisma/seed.ts",
+    "workers": "tsx src/workers/runner.ts",
+    "services:start": "podman start quotehub-postgres quotehub-redis",
+    "services:stop": "podman stop quotehub-postgres quotehub-redis",
+    "services:status": "podman ps --filter name=quotehub"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1147.0",
+    "@aws-sdk/s3-request-presigner": "^3.1147.0",
+    "@opentelemetry/auto-instrumentations-node": "^0.81.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.223.0",
+    "@opentelemetry/sdk-node": "^0.223.0",
+    "@prisma/client": "^5.20.0",
+    "@prisma/instrumentation": "^7.10.0",
+    "@sentry/node": "^11.6.0",
+    "better-auth": "^1.7.7",
+    "bullmq": "^6.3.11",
+    "cors": "^2.8.6",
+    "express": "^4.21.0",
+    "helmet": "^8.3.0",
+    "ioredis": "^5.11.1",
+    "pino": "^9.4.0",
+    "pino-http": "^10.3.0",
+    "pino-pretty": "^11.2.2",
+    "resend": "^6.32.1",
+    "sharp": "^0.35.5",
+    "swagger-ui-express": "^5.0.1",
+    "uuidv7": "^1.0.2",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.16.10",
+    "@types/supertest": "^6.0.2",
+    "@types/swagger-ui-express": "^4.1.6",
+    "ioredis-mock": "^8.13.1",
+    "prisma": "^5.20.0",
+    "supertest": "^7.0.0",
+    "tsx": "^4.19.1",
+    "typescript": "^5.6.2",
+    "vitest": "^2.1.2"
+  }
+}
