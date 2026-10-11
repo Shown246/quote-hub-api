@@ -17,6 +17,29 @@ export class UserController {
   constructor(private readonly userService: UserService = new UserService()) {}
 
   /**
+   * Retrieves the current authenticated user's profile.
+   * Identity is derived strictly from req.user.
+   * Returns a sanitized UserProfileResponse stripping internal fields.
+   */
+  getCurrentUser = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> => {
+    try {
+      if (!req.user) {
+        throw new AuthenticationError(
+          "Authentication required",
+          "AUTHENTICATION_REQUIRED"
+        );
+      }
+      res.status(200).json(toUserProfileResponse(req.user));
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /**
    * Retrieves a public user profile by username handle.
    * Returns a sanitized UserProfileResponse stripping internal fields.
    */

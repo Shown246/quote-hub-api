@@ -95,6 +95,33 @@ describe("User Routes Integration", () => {
       expect(res.body.deletedAt).toBeUndefined();
     });
   });
+ 
+  describe("GET /api/v1/users/me", () => {
+    it("should return 401 when unauthenticated", async () => {
+      vi.spyOn(auth.api, "getSession").mockResolvedValueOnce(null as any);
+
+      const res = await request(app).get("/api/v1/users/me");
+
+      expect(res.status).toBe(401);
+      expect(res.body.code).toBe("AUTHENTICATION_REQUIRED");
+    });
+
+    it("should return 200 with sanitized authenticated user profile", async () => {
+      vi.spyOn(auth.api, "getSession").mockResolvedValueOnce(mockSession as any);
+      vi.spyOn(prisma.user, "findFirst").mockResolvedValueOnce(mockDomainUser as any);
+
+      const res = await request(app).get("/api/v1/users/me");
+
+      expect(res.status).toBe(200);
+      expect(res.body.id).toBe(mockDomainUser.id);
+      expect(res.body.username).toBe("johndoe");
+      expect(res.body.displayName).toBe("John Doe");
+      expect(res.body.role).toBe("USER");
+      expect(res.body.status).toBe("ACTIVE");
+      expect(res.body.authId).toBeUndefined();
+      expect(res.body.suspendedAt).toBeUndefined();
+    });
+  });
 
   describe("PATCH /api/v1/users/me", () => {
     it("should return 401 when unauthenticated", async () => {

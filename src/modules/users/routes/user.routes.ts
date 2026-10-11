@@ -9,6 +9,7 @@ export const userRouter = Router();
 
 userRouter.use(followRouter);
 
+userRouter.get("/me", requireAuth, userController.getCurrentUser);
 userRouter.patch("/me", requireAuth, userController.updateProfile);
 userRouter.post("/me/profile-image", requireAuth, userController.requestAvatarUpload);
 userRouter.post(
