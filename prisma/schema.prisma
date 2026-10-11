@@ -1,0 +1,329 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["tracing"]
+}
+
+// ============================================================================
+// CUSTOM POSTGRESQL ENUMS
+// ============================================================================
+
+enum UserRole {
+  USER
+  ADMIN
+
+  @@map("user_role")
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  DELETED
+
+  @@map("user_status")
+}
+
+enum NotificationType {
+  LIKE
+  REPOST
+  FOLLOW
+
+  @@map("notification_type")
+}
+
+enum OutboxStatus {
+  PENDING
+  PROCESSING
+  PUBLISHED
+  FAILED
+
+  @@map("outbox_status")
+}
+
+enum IdempotencyStatus {
+  PENDING
+  COMPLETED
+  FAILED
+
+  @@map("idempotency_status")
+}
+
+// ============================================================================
+// BETTER AUTH MODELS (SEPARATED AUTH SUBSYSTEM)
+// ============================================================================
+
+model AuthUser {
+  id            String        @id
+  name          String
+  email         String        @unique
+  emailVerified Boolean       @map("email_verified")
+  image         String?
+  createdAt     DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  sessions      AuthSession[]
+  accounts      AuthAccount[]
+  user          User?
+
+  @@map("auth_user")
+}
+
+model AuthSession {
+  id        String   @id
+  expiresAt DateTime @map("expires_at") @db.Timestamptz
+  token     String   @unique
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  ipAddress String?  @map("ip_address")
+  userAgent String?  @map("user_agent")
+  userId    String   @map("user_id")
+  user      AuthUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("auth_session")
+}
+
+model AuthAccount {
+  id                    String    @id
+  accountId             String    @map("account_id")
+  providerId            String    @map("provider_id")
+  userId                String    @map("user_id")
+  user                  AuthUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?   @map("access_token")
+  refreshToken          String?   @map("refresh_token")
+  idToken               String?   @map("id_token")
+  accessTokenExpiresAt  DateTime? @map("access_token_expires_at") @db.Timestamptz
+  refreshTokenExpiresAt DateTime? @map("refresh_token_expires_at") @db.Timestamptz
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt             DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("auth_account")
+}
+
+model AuthVerification {
+  id         String    @id
+  identifier String
+  value      String
+  expiresAt  DateTime  @map("expires_at") @db.Timestamptz
+  createdAt  DateTime? @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt  DateTime? @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("auth_verification")
+}
+
+// ============================================================================
+// DOMAIN MODELS
+// ============================================================================
+
+model User {
+  id               String       @id @db.Uuid
+  authId           String?      @unique @map("auth_id")
+  username         String       @unique @db.VarChar(30)
+  displayName      String       @map("display_name") @db.VarChar(50)
+  bio              String?      @db.VarChar(160)
+  profileImageUrl  String?      @map("profile_image_url") @db.Text
+  role             UserRole     @default(USER)
+  status           UserStatus   @default(ACTIVE)
+  suspendedAt      DateTime?    @map("suspended_at") @db.Timestamptz
+  suspendedUntil   DateTime?    @map("suspended_until") @db.Timestamptz
+  suspensionReason String?      @map("suspension_reason") @db.Text
+  followerCount    Int          @default(0) @map("follower_count")
+  followingCount   Int          @default(0) @map("following_count")
+  createdAt        DateTime     @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt        DateTime?    @map("deleted_at") @db.Timestamptz
+
+  authUser         AuthUser?    @relation(fields: [authId], references: [id], onDelete: SetNull)
+  quotes           Quote[]
+  likes            Like[]
+  reposts          Repost[]
+  bookmarks        Bookmark[]
+  following        Follow[]     @relation("UserFollowing")
+  followers        Follow[]     @relation("UserFollowers")
+  receivedNotifications Notification[] @relation("NotificationRecipient")
+  triggeredNotifications Notification[] @relation("NotificationActor")
+  idempotencyKeys  IdempotencyKey[]
+  auditLogs        AuditLog[]
+
+  @@index([status, createdAt(sort: Desc)], name: "idx_users_status_created")
+  @@map("users")
+}
+
+model Theme {
+  id        String   @id @db.Uuid
+  key       String   @unique @db.VarChar(50)
+  name      String   @db.VarChar(100)
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  quotes    Quote[]
+
+  @@map("themes")
+}
+
+model Quote {
+  id          String    @id @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  text        String    @db.VarChar(280)
+  isOriginal  Boolean   @map("is_original")
+  authorName  String?   @map("author_name") @db.VarChar(100)
+  themeId     String    @map("theme_id") @db.Uuid
+  likeCount   Int       @default(0) @map("like_count")
+  repostCount Int       @default(0) @map("repost_count")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz
+
+  user        User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+  theme       Theme     @relation(fields: [themeId], references: [id], onDelete: Restrict)
+  likes       Like[]
+  reposts     Repost[]
+  bookmarks   Bookmark[]
+
+  @@index([userId, createdAt(sort: Desc)], name: "idx_quotes_user_created")
+  @@index([themeId], name: "idx_quotes_theme_id")
+  @@map("quotes")
+}
+
+model Like {
+  userId    String   @map("user_id") @db.Uuid
+  quoteId   String   @map("quote_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  quote     Quote    @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+
+  @@id([userId, quoteId])
+  @@index([quoteId], name: "idx_likes_quote_id")
+  @@index([userId, createdAt(sort: Desc)], name: "idx_likes_user_created")
+  @@map("likes")
+}
+
+model Repost {
+  id        String   @id @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  quoteId   String   @map("quote_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  quote     Quote    @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, quoteId], name: "uq_reposts_user_quote")
+  @@index([userId, createdAt(sort: Desc)], name: "idx_reposts_user_created")
+  @@index([quoteId, createdAt(sort: Desc)], name: "idx_reposts_quote_created")
+  @@map("reposts")
+}
+
+model Bookmark {
+  userId    String   @map("user_id") @db.Uuid
+  quoteId   String   @map("quote_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  quote     Quote    @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+
+  @@id([userId, quoteId])
+  @@index([userId, createdAt(sort: Desc)], name: "idx_bookmarks_user_created")
+  @@map("bookmarks")
+}
+
+model Follow {
+  followerId  String   @map("follower_id") @db.Uuid
+  followingId String   @map("following_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  follower    User     @relation("UserFollowing", fields: [followerId], references: [id], onDelete: Cascade)
+  following   User     @relation("UserFollowers", fields: [followingId], references: [id], onDelete: Cascade)
+
+  @@id([followerId, followingId])
+  @@index([followingId, createdAt(sort: Desc)], name: "idx_follows_following_created")
+  @@index([followerId, createdAt(sort: Desc)], name: "idx_follows_follower_created")
+  @@map("follows")
+}
+
+model Notification {
+  id        String           @id @db.Uuid
+  userId    String           @map("user_id") @db.Uuid
+  actorId   String           @map("actor_id") @db.Uuid
+  type      NotificationType
+  entityId  String           @map("entity_id") @db.Uuid
+  readAt    DateTime?        @map("read_at") @db.Timestamptz
+  createdAt DateTime         @default(now()) @map("created_at") @db.Timestamptz
+
+  user      User             @relation("NotificationRecipient", fields: [userId], references: [id], onDelete: Cascade)
+  actor     User             @relation("NotificationActor", fields: [actorId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)], name: "idx_notifications_user_created")
+  @@map("notifications")
+}
+
+model OutboxEvent {
+  id            String       @id @db.Uuid
+  eventType     String       @map("event_type") @db.VarChar(100)
+  aggregateType String       @map("aggregate_type") @db.VarChar(50)
+  aggregateId   String       @map("aggregate_id") @db.Uuid
+  payload       Json         @db.JsonB
+  status        OutboxStatus @default(PENDING)
+  retryCount    Int          @default(0) @map("retry_count")
+  lastError     String?      @map("last_error") @db.Text
+  scheduledAt   DateTime     @default(now()) @map("scheduled_at") @db.Timestamptz
+  processedAt   DateTime?    @map("processed_at") @db.Timestamptz
+  createdAt     DateTime     @default(now()) @map("created_at") @db.Timestamptz
+
+  @@map("outbox_events")
+}
+
+model IdempotencyKey {
+  id             String            @id @db.Uuid
+  userId         String            @map("user_id") @db.Uuid
+  key            String            @db.VarChar(255)
+  endpoint       String            @db.VarChar(255)
+  requestHash    String            @map("request_hash") @db.Char(64)
+  status         IdempotencyStatus @default(PENDING)
+  responseStatus Int?              @map("response_status") @db.SmallInt
+  responseBody   Json?             @map("response_body") @db.JsonB
+  createdAt      DateTime          @default(now()) @map("created_at") @db.Timestamptz
+  expiresAt      DateTime          @map("expires_at") @db.Timestamptz
+
+  user           User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, key, endpoint], name: "uq_idempotency_user_key_ep")
+  @@index([expiresAt], name: "idx_idempotency_expires_at")
+  @@map("idempotency_keys")
+}
+
+model AuditLog {
+  id           String   @id @db.Uuid
+  actorUserId  String   @map("actor_user_id") @db.Uuid
+  action       String   @db.VarChar(100)
+  resourceType String   @map("resource_type") @db.VarChar(50)
+  resourceId   String   @map("resource_id") @db.VarChar(255)
+  metadata     Json?    @db.JsonB
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  actorUser    User     @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@index([actorUserId, createdAt(sort: Desc)], name: "idx_audit_logs_actor_created")
+  @@index([resourceType, resourceId], name: "idx_audit_logs_resource")
+  @@map("audit_logs")
+}
+
+model DailyMetric {
+  metricDate       DateTime @id @map("metric_date") @db.Date
+  registeredUsers  Int      @default(0) @map("registered_users")
+  activeUsers      Int      @default(0) @map("active_users")
+  quotesCreated    Int      @default(0) @map("quotes_created")
+  likesCreated     Int      @default(0) @map("likes_created")
+  repostsCreated   Int      @default(0) @map("reposts_created")
+  bookmarksCreated Int      @default(0) @map("bookmarks_created")
+  followsCreated   Int      @default(0) @map("follows_created")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("daily_metrics")
+}
