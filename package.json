@@ -12,7 +12,11 @@
     "workers": "tsx src/workers/runner.ts",
     "services:start": "podman start quotehub-postgres quotehub-redis",
     "services:stop": "podman stop quotehub-postgres quotehub-redis",
-    "services:status": "podman ps --filter name=quotehub"
+    "services:status": "podman ps --filter name=quotehub",
+    "test:perf:seed": "tsx load-tests/scripts/seed-load-data.ts",
+    "test:perf:audit": "tsx load-tests/scripts/audit-system-health.ts",
+    "test:perf:smoke": "k6 run load-tests/scenarios/smoke-test.js",
+    "test:perf:run": "k6 run load-tests/scenarios/mixed-user-journey.js"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
