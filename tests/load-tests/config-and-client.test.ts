@@ -8,11 +8,14 @@ describe("load-tests config & client utils", () => {
     const config = getConfig({});
     expect(config.baseUrl).toBe("http://192.168.0.112:4000");
     expect(config.thresholds.http_req_failed).toContain("rate<0.01");
+    expect(config.summaryTrendStats).toContain("p(99)");
+    expect(config.summaryTrendStats).toContain("count");
   });
 
   it("allows overriding BASE_URL via environment options", () => {
     const config = getConfig({ BASE_URL: "http://localhost:4000" });
     expect(config.baseUrl).toBe("http://localhost:4000");
+    expect(config.summaryTrendStats).toContain("p(99)");
   });
 
   it("generates unique UUID strings", () => {

@@ -43,17 +43,21 @@ export function formatTextSummary(data) {
   const p95 = durationMetric.values?.["p(95)"];
   const p99 = durationMetric.values?.["p(99)"];
 
-  const formatLatency = (val) => {
-    if (totalReqs === 0 || val === undefined || val === null || isNaN(val)) {
+  const formatLatency = (val, count) => {
+    if (count === 0 || totalReqs === 0 || val === undefined || val === null || isNaN(val)) {
       return "N/A";
     }
     return val.toFixed(1);
   };
 
+  const header = "ENDPOINT / ROUTE                     REQS     RPS   p90(ms)   p95(ms)   p99(ms)   ERR(%)  SLA";
+  const separator = "=".repeat(header.length);
+  const divider = "-".repeat(header.length);
+
   const lines = [
-    "========================================================================================",
-    "ENDPOINT / ROUTE               REQS     RPS     p90(ms)   p95(ms)   p99(ms)   ERR(%)  SLA",
-    "========================================================================================",
+    separator,
+    header,
+    separator,
   ];
 
   // Inspect tagged sub-metrics if present
@@ -74,8 +78,14 @@ export function formatTextSummary(data) {
     health_ready: "GET  /health/ready",
   };
 
-  if (endpointKeys.length > 0) {
-    for (const key of endpointKeys) {
+  const activeKeys = endpointKeys.filter((k) => {
+    const epCount = metrics[k]?.values?.count;
+    return epCount !== undefined && epCount > 0;
+  });
+  const keysToDisplay = activeKeys.length > 0 ? activeKeys : endpointKeys;
+
+  if (keysToDisplay.length > 0) {
+    for (const key of keysToDisplay) {
       const match = key.match(/name:([^}]+)/);
       const tag = match ? match[1] : key;
       const displayName = endpointNamesMap[tag] || tag;
@@ -85,22 +95,33 @@ export function formatTextSummary(data) {
       const epFailed = metrics[`http_req_failed{name:${tag}}`];
 
       const epCountVal = epDuration.values?.count ?? epReqs?.values?.count;
-      const epRpsVal = epReqs?.values?.rate;
-      const epErrVal = epFailed?.values?.rate;
+      let epRpsVal = epReqs?.values?.rate;
+      if (epRpsVal === undefined && epCountVal !== undefined) {
+        const durationSec = safeNum(data?.state?.testRunDurationMs) / 1000;
+        if (durationSec > 0) {
+          epRpsVal = epCountVal / durationSec;
+        }
+      }
+
+      let epErrVal = epFailed?.values?.rate;
+      if (epErrVal === undefined && epCountVal !== undefined && safeNum(failedMetric.values?.rate) === 0) {
+        epErrVal = 0;
+      }
+
       const epStatus = getSlaStatus(epDuration);
 
-      const rName = displayName.padEnd(28, " ");
+      const rName = displayName.padEnd(34, " ");
       const rReqs = (epCountVal !== undefined ? String(epCountVal) : "-").padStart(6, " ");
       const rRps = (epRpsVal !== undefined ? epRpsVal.toFixed(1) : "-").padStart(7, " ");
-      const rP90 = formatLatency(epDuration.values?.["p(90)"]).padStart(8, " ");
-      const rP95 = formatLatency(epDuration.values?.["p(95)"]).padStart(8, " ");
-      const rP99 = formatLatency(epDuration.values?.["p(99)"]).padStart(8, " ");
-      const rErr = (epErrVal !== undefined ? `${(epErrVal * 100).toFixed(2)}%` : "-").padStart(8, " ");
+      const rP90 = formatLatency(epDuration.values?.["p(90)"], epCountVal).padStart(9, " ");
+      const rP95 = formatLatency(epDuration.values?.["p(95)"], epCountVal).padStart(9, " ");
+      const rP99 = formatLatency(epDuration.values?.["p(99)"], epCountVal).padStart(9, " ");
+      const rErr = (epCountVal === 0 ? "-" : (epErrVal !== undefined ? `${(epErrVal * 100).toFixed(2)}%` : "-")).padStart(8, " ");
       const rSla = (epCountVal === 0 ? "PASS" : epStatus).padStart(5, " ");
 
       lines.push(`${rName} ${rReqs} ${rRps} ${rP90} ${rP95} ${rP99} ${rErr} ${rSla}`);
     }
-    lines.push("----------------------------------------------------------------------------------------");
+    lines.push(divider);
   }
 
   const overallStatus =
@@ -108,17 +129,27 @@ export function formatTextSummary(data) {
       ? "PASS"
       : "FAIL";
 
-  const totalName = "TOTAL / OVERALL".padEnd(28, " ");
+  const totalName = "TOTAL / OVERALL".padEnd(34, " ");
   const tReqs = String(totalReqs).padStart(6, " ");
   const tRps = (totalReqs === 0 ? "0.0" : totalRps.toFixed(1)).padStart(7, " ");
-  const tP90 = formatLatency(p90).padStart(8, " ");
-  const tP95 = formatLatency(p95).padStart(8, " ");
-  const tP99 = formatLatency(p99).padStart(8, " ");
+  const tP90 = formatLatency(p90, totalReqs).padStart(9, " ");
+  const tP95 = formatLatency(p95, totalReqs).padStart(9, " ");
+  const tP99 = formatLatency(p99, totalReqs).padStart(9, " ");
   const tErr = `${errRate.toFixed(2)}%`.padStart(8, " ");
   const tSla = overallStatus.padStart(5, " ");
 
   lines.push(`${totalName} ${tReqs} ${tRps} ${tP90} ${tP95} ${tP99} ${tErr} ${tSla}`);
-  lines.push("========================================================================================");
+  lines.push(separator);
+
+  const checksMetric = metrics.checks || {};
+  const passes = checksMetric.values?.passes;
+  const fails = checksMetric.values?.fails;
+  if (passes !== undefined && fails !== undefined) {
+    const totalChecks = passes + fails;
+    const passRate = totalChecks > 0 ? ((passes / totalChecks) * 100).toFixed(2) : "100.00";
+    lines.push(`Checks: ${passes}/${totalChecks} passed (${passRate}%)`);
+    lines.push(separator);
+  }
 
   return lines.join("\n");
 }

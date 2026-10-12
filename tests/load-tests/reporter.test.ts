@@ -47,4 +47,34 @@ describe("reporter utils", () => {
     expect(html).toContain("Performance Test Summary");
     expect(html).toContain("78.1");
   });
+
+  it("formats ASCII summary table with per-endpoint REQS, RPS, p99, ERR rates, and checks", () => {
+    const dataWithEndpoints = {
+      state: { testRunDurationMs: 10000 },
+      metrics: {
+        http_req_duration: {
+          values: { "p(90)": 50, "p(95)": 80, "p(99)": 120, avg: 40, count: 200 },
+          thresholds: { "p(95)<250": { ok: true } }
+        },
+        http_req_failed: { values: { rate: 0.005 } },
+        http_reqs: { values: { rate: 20.0, count: 200 } },
+        "http_req_duration{name:feed_for_you}": {
+          values: { "p(90)": 30.5, "p(95)": 45.2, "p(99)": 60.1, count: 100 },
+          thresholds: { "p(95)<100": { ok: true } }
+        },
+        "http_req_failed{name:feed_for_you}": {
+          values: { rate: 0.01 }
+        },
+        checks: {
+          values: { passes: 198, fails: 2, rate: 0.99 }
+        }
+      }
+    };
+    const table = formatTextSummary(dataWithEndpoints);
+    expect(table).toContain("GET  /api/v1/feed/for-you");
+    expect(table).toContain("60.1"); // p99
+    expect(table).toContain("1.00%"); // error rate
+    expect(table).toContain("100"); // count
+    expect(table).toContain("Checks: 198/200 passed (99.00%)");
+  });
 });

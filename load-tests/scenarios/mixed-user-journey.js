@@ -44,6 +44,7 @@ const config = getConfig();
 export const options = {
   stages: config.stages,
   thresholds: config.thresholds,
+  summaryTrendStats: config.summaryTrendStats,
 };
 
 const SAMPLE_POST_TEXTS = [
@@ -94,14 +95,34 @@ export default function () {
         headers: authHeaders,
         tags: { name: "feed_for_you" },
       });
-      check(res, { "feed/for-you status is 200": (r) => r.status === 200 });
+      check(res, {
+        "feed/for-you status is 200": (r) => r.status === 200,
+        "feed/for-you valid response": (r) => {
+          try {
+            const body = r.json();
+            return Array.isArray(body?.data);
+          } catch {
+            return false;
+          }
+        },
+      });
     } else if (roll < 0.65) {
       // 25% - Following Feed with pagination crawl
       const res = http.get(`${baseUrl}/api/v1/feed/following`, {
         headers: authHeaders,
         tags: { name: "feed_following" },
       });
-      check(res, { "feed/following status is 200": (r) => r.status === 200 });
+      check(res, {
+        "feed/following status is 200": (r) => r.status === 200,
+        "feed/following valid response": (r) => {
+          try {
+            const body = r.json();
+            return Array.isArray(body?.data);
+          } catch {
+            return false;
+          }
+        },
+      });
 
       // 50% chance to fetch page 2 if cursor exists
       if (Math.random() < 0.50) {
@@ -127,7 +148,17 @@ export default function () {
           headers: authHeaders,
           tags: { name: "quote_details" },
         });
-        check(res, { "quote details status is 200": (r) => r.status === 200 });
+        check(res, {
+          "quote details status is 200": (r) => r.status === 200,
+          "quote details valid response": (r) => {
+            try {
+              const body = r.json();
+              return Boolean(body?.id);
+            } catch {
+              return false;
+            }
+          },
+        });
       }
     } else {
       // 5% - Trigram Search
@@ -136,7 +167,17 @@ export default function () {
         headers: authHeaders,
         tags: { name: "search" },
       });
-      check(res, { "search status is 200": (r) => r.status === 200 });
+      check(res, {
+        "search status is 200": (r) => r.status === 200,
+        "search valid response": (r) => {
+          try {
+            const body = r.json();
+            return Array.isArray(body?.data || body?.items || body);
+          } catch {
+            return false;
+          }
+        },
+      });
     }
   } else if (category === "INTERACTION") {
     // 15% Total: Like (8%), Bookmark (4%), Repost (3%)
@@ -183,7 +224,17 @@ export default function () {
         tags: { name: "create_quote" },
       }
     );
-    check(res, { "create quote status is 200 or 201": (r) => r.status === 200 || r.status === 201 });
+    check(res, {
+      "create quote status is 200 or 201": (r) => r.status === 200 || r.status === 201,
+      "create quote valid response": (r) => {
+        try {
+          const body = r.json();
+          return Boolean(body?.id);
+        } catch {
+          return false;
+        }
+      },
+    });
   }
 
   // Think time pacing: jittered sleep between 0.2s and 0.8s

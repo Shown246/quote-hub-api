@@ -25,12 +25,12 @@ try {
   dataset = null;
 }
 
+const config = getConfig();
 export const options = {
   vus: 1,
   duration: "30s",
-  thresholds: {
-    http_req_failed: ["rate<0.01"],
-  },
+  summaryTrendStats: config.summaryTrendStats,
+  thresholds: config.thresholds,
 };
 
 export default function () {
