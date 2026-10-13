@@ -12,7 +12,7 @@ export function getConfig(envOverrides) {
     ? envOverrides
     : (typeof __ENV !== "undefined" ? __ENV : (typeof process !== "undefined" ? process.env : {}));
 
-  const baseUrl = (env && env.BASE_URL) || "http://192.168.0.112:4000";
+  const baseUrl = (env && env.BASE_URL) || "http://192.168.0.108:4000";
 
   const stages = [
     { duration: "1m", target: 20 },

@@ -82,7 +82,7 @@ export async function auditSystemHealth(options?: {
   redisClient?: Redis;
 }): Promise<HealthAuditReport> {
   const prisma = options?.prismaClient ?? new PrismaClient();
-  const redis = options?.redisClient ?? new Redis(process.env.REDIS_URL || "redis://192.168.0.112:6379", {
+  const redis = options?.redisClient ?? new Redis(process.env.REDIS_URL || "redis://192.168.0.108:6379", {
     lazyConnect: true,
     connectTimeout: 5000,
     maxRetriesPerRequest: 1,
@@ -139,7 +139,7 @@ export async function auditSystemHealth(options?: {
     console.error("DIAGNOSTIC ERROR: Database connection failed during system health audit.");
     console.error(`Reason: ${err?.message || err}`);
     console.error("Hint: Verify DATABASE_URL points to reachable PostgreSQL instance on Host B.");
-    console.error("Example: DATABASE_URL=\"postgresql://quotehub:quotehub_secret@192.168.0.112:5432/quotehub?schema=public\"");
+    console.error("Example: DATABASE_URL=\"postgresql://quotehub:quotehub_secret@192.168.0.108:5432/quotehub?schema=public\"");
     console.error("=======================================================\n");
   } finally {
     if (!options?.prismaClient) {

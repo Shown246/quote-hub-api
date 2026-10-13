@@ -4,9 +4,9 @@ import { getConfig } from "../../load-tests/config/env.js";
 import { generateUuid, buildHeaders } from "../../load-tests/utils/http-client.js";
 
 describe("load-tests config & client utils", () => {
-  it("defaults BASE_URL to http://192.168.0.112:4000 when unset", () => {
+  it("defaults BASE_URL to http://192.168.0.108:4000 when unset", () => {
     const config = getConfig({});
-    expect(config.baseUrl).toBe("http://192.168.0.112:4000");
+    expect(config.baseUrl).toBe("http://192.168.0.108:4000");
     expect(config.thresholds.http_req_failed).toContain("rate<0.01");
     expect(config.summaryTrendStats).toContain("p(99)");
     expect(config.summaryTrendStats).toContain("count");
