@@ -1,6 +1,7 @@
 // load-tests/scripts/audit-system-health.ts
 import { PrismaClient } from "@prisma/client";
 import Redis from "ioredis";
+import { FEED_FOR_YOU_REDIS_KEY } from "../../src/modules/trending/services/trending.service";
 
 export interface OutboxLagReport {
   pendingCount: number;
@@ -154,7 +155,7 @@ export async function auditSystemHealth(options?: {
     await redis.connect();
     redisConnected = true;
     memoryInfo = await redis.info("memory");
-    feedForYouSize = await redis.zcard("feed:for-you");
+    feedForYouSize = await redis.zcard(FEED_FOR_YOU_REDIS_KEY);
   } catch (err: any) {
     console.warn(`[Audit] Warning: Could not reach Redis at ${process.env.REDIS_URL || "default URL"}: ${err?.message}`);
   } finally {

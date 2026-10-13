@@ -101,6 +101,8 @@ describe("FeedService", () => {
       expect(result.items[0].quote.themeKey).toBe("dark-mode");
       expect(result.hasMore).toBe(false);
       expect(result.nextCursor).toBeNull();
+      // Verifies no redundant hydration query was issued
+      expect(mockPrisma.quote.findMany).not.toHaveBeenCalled();
     });
 
     it("should defensively clamp trending quotes when trending volume exceeds limit and set hasMore via existence check", async () => {

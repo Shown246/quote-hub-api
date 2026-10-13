@@ -6,6 +6,7 @@ import {
   NotFoundError,
   ValidationError,
 } from "../../../shared/errors/problem-details";
+import { invalidateUserSessionCache } from "../../../middleware/auth";
 
 export interface ListUsersOptions {
   status?: UserStatus;
@@ -116,7 +117,7 @@ export class AdminUserService {
       throw new ValidationError("Invalid suspension expiration date");
     }
 
-    return this.runTransaction(async (tx) => {
+    const result = await this.runTransaction(async (tx) => {
       const existingUser = await this.findUserById(userId, tx);
       if (!existingUser) {
         throw new NotFoundError("Resource not found");
@@ -168,6 +169,10 @@ export class AdminUserService {
 
       return updatedUser;
     });
+
+    await invalidateUserSessionCache(userId);
+
+    return result;
   }
 
   /**

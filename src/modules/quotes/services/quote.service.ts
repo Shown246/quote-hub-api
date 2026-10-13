@@ -10,6 +10,7 @@ import {
 import { CreateQuoteDto, UpdateQuoteDto, QuoteQueryDto } from "../schemas/quote.schemas";
 import { decodeCursor } from "../../../shared/utils/cursor";
 import { safeRedisCall } from "../../../infrastructure/redis/redis";
+import { getOrSetCache, invalidateCache } from "../../../infrastructure/redis/cache";
 import { TRENDING_REDIS_KEY } from "../../trending/services/trending.service";
 
 export class QuoteService {
@@ -60,10 +61,20 @@ export class QuoteService {
    * @throws NotFoundError if the quote does not exist or has been soft-deleted
    */
   async getQuoteById(id: string): Promise<Quote> {
-    const quote = await this.quoteRepo.findById(id);
-    if (!quote || quote.deletedAt !== null) {
-      throw new NotFoundError("Quote not found");
+    const quote = await getOrSetCache(`cache:quote:${id}`, 600, async () => {
+      const q = await this.quoteRepo.findById(id);
+      if (!q || q.deletedAt !== null) {
+        throw new NotFoundError("Quote not found");
+      }
+      return q;
+    });
+
+    if (quote) {
+      if (quote.createdAt) quote.createdAt = new Date(quote.createdAt);
+      if (quote.updatedAt) quote.updatedAt = new Date(quote.updatedAt);
+      if (quote.deletedAt) quote.deletedAt = new Date(quote.deletedAt);
     }
+
     return quote;
   }
 
@@ -107,10 +118,14 @@ export class QuoteService {
       }
     }
 
-    return this.quoteRepo.update(id, {
+    const updated = await this.quoteRepo.update(id, {
       text: dto.text,
       themeId: dto.themeId,
     });
+
+    await invalidateCache(`cache:quote:${id}`);
+
+    return updated;
   }
 
   /**
@@ -136,6 +151,8 @@ export class QuoteService {
     }
 
     const deleted = await this.quoteRepo.softDelete(id);
+
+    await invalidateCache(`cache:quote:${id}`);
 
     // Invalidate Redis trending sorted set cache per TDD § 101
     await this.safeCall(

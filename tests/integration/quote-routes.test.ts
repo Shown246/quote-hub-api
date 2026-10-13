@@ -3,6 +3,7 @@ import request from "supertest";
 import { createApp } from "../../src/app/app";
 import { auth } from "../../src/modules/auth/auth";
 import { prisma } from "../../src/infrastructure/database/prisma";
+import { invalidateCache } from "../../src/infrastructure/redis/cache";
 
 describe("Quote Routes Integration", () => {
   const app = createApp();
@@ -80,8 +81,13 @@ describe("Quote Routes Integration", () => {
     deletedAt: null,
   };
 
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.restoreAllMocks();
+    await invalidateCache(
+      `cache:quote:${mockQuote.id}`,
+      `cache:theme:${mockTheme.id}`,
+      `cache:themes:active`
+    );
   });
 
   describe("Unauthenticated Access (401)", () => {

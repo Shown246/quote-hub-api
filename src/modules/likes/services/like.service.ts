@@ -5,6 +5,7 @@ import {
   NotFoundError,
   ValidationError,
 } from "../../../shared/errors/problem-details";
+import { invalidateCache } from "../../../infrastructure/redis/cache";
 
 export class LikeService {
   constructor(private readonly db: PrismaClient = prisma) {}
@@ -58,7 +59,7 @@ export class LikeService {
     quoteId: string
   ): Promise<{ liked: boolean; quoteId: string }> {
     try {
-      return await this.runTransaction(async (tx) => {
+      const result = await this.runTransaction(async (tx) => {
         const quoteOwner = await this.getQuoteOwner(quoteId, tx);
 
         if (quoteOwner === userId) {
@@ -108,6 +109,9 @@ export class LikeService {
 
         return { liked: true, quoteId };
       });
+
+      await invalidateCache(`cache:quote:${quoteId}`);
+      return result;
     } catch (error: any) {
       if (
         (error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -133,7 +137,7 @@ export class LikeService {
     quoteId: string
   ): Promise<{ liked: boolean; quoteId: string }> {
     try {
-      return await this.runTransaction(async (tx) => {
+      const result = await this.runTransaction(async (tx) => {
         await this.getQuoteOwner(quoteId, tx);
 
         const existingLike = await tx.like.findUnique({
@@ -178,6 +182,9 @@ export class LikeService {
 
         return { liked: false, quoteId };
       });
+
+      await invalidateCache(`cache:quote:${quoteId}`);
+      return result;
     } catch (error: any) {
       if (
         (error instanceof Prisma.PrismaClientKnownRequestError &&

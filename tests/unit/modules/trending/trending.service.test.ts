@@ -5,6 +5,7 @@ import { Quote } from "@prisma/client";
 import {
   calculateTrendingScore,
   TrendingService,
+  FEED_FOR_YOU_REDIS_KEY,
   TRENDING_REDIS_KEY,
   TRENDING_TTL_SECONDS,
 } from "../../../../src/modules/trending/services/trending.service";
@@ -12,6 +13,12 @@ import { TrendingController } from "../../../../src/modules/trending/controllers
 import { createApp } from "../../../../src/app/app";
 
 describe("Trending Module", () => {
+  describe("Key Standardization", () => {
+    it("should standardize Redis key to feed:for-you with backward-compatible alias", () => {
+      expect(FEED_FOR_YOU_REDIS_KEY).toBe("feed:for-you");
+      expect(TRENDING_REDIS_KEY).toBe("feed:for-you");
+    });
+  });
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -176,6 +183,10 @@ describe("Trending Module", () => {
             id: { in: ["quote-2", "quote-1", "quote-3"] },
             deletedAt: null,
           },
+          include: {
+            user: true,
+            theme: true,
+          },
         });
         // Preserves Redis order: 2, 1, 3
         expect(result).toHaveLength(3);
@@ -226,6 +237,10 @@ describe("Trending Module", () => {
             deletedAt: null,
             createdAt: { gte: expect.any(Date) },
           },
+          include: {
+            user: true,
+            theme: true,
+          },
           orderBy: [
             { likeCount: "desc" },
             { repostCount: "desc" },
@@ -261,6 +276,10 @@ describe("Trending Module", () => {
           where: {
             deletedAt: null,
             createdAt: { gte: expect.any(Date) },
+          },
+          include: {
+            user: true,
+            theme: true,
           },
           orderBy: [
             { likeCount: "desc" },
@@ -299,6 +318,10 @@ describe("Trending Module", () => {
             deletedAt: null,
             createdAt: { gte: expect.any(Date) },
           },
+          include: {
+            user: true,
+            theme: true,
+          },
           orderBy: [
             { likeCount: "desc" },
             { repostCount: "desc" },
@@ -309,6 +332,10 @@ describe("Trending Module", () => {
         expect(mockPrisma.quote.findMany).toHaveBeenNthCalledWith(2, {
           where: {
             deletedAt: null,
+          },
+          include: {
+            user: true,
+            theme: true,
           },
           orderBy: {
             createdAt: "desc",
@@ -336,6 +363,10 @@ describe("Trending Module", () => {
           where: {
             deletedAt: null,
             createdAt: { gte: expect.any(Date) },
+          },
+          include: {
+            user: true,
+            theme: true,
           },
           orderBy: [
             { likeCount: "desc" },

@@ -6,6 +6,7 @@ import { prisma } from "../../../src/infrastructure/database/prisma";
 import { feedService } from "../../../src/modules/feeds/services/feed.service";
 import { trendingService } from "../../../src/modules/trending/services/trending.service";
 import { encodeCursor } from "../../../src/shared/utils/cursor";
+import { invalidateByPattern } from "../../../src/infrastructure/redis/cache";
 
 describe("E2E Journey 3: Discovery, Feeds & Search Lifecycle", () => {
   const app = createApp();
@@ -109,8 +110,9 @@ describe("E2E Journey 3: Discovery, Feeds & Search Lifecycle", () => {
     createdAt: new Date("2026-10-07T09:30:00.000Z"),
   };
 
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.restoreAllMocks();
+    await invalidateByPattern("cache:search:*");
   });
 
   describe("1. Following Feed Retrieval & Cursor Pagination", () => {

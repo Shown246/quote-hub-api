@@ -3,7 +3,11 @@ import Redis from "ioredis";
 import { prisma } from "../../../infrastructure/database/prisma";
 import { redis, safeRedisCall } from "../../../infrastructure/redis/redis";
 
-export const TRENDING_REDIS_KEY = "trending:global:24h";
+export const FEED_FOR_YOU_REDIS_KEY = "feed:for-you";
+/**
+ * @deprecated Use FEED_FOR_YOU_REDIS_KEY instead. Maintained for backwards compatibility.
+ */
+export const TRENDING_REDIS_KEY = FEED_FOR_YOU_REDIS_KEY;
 export const TRENDING_TTL_SECONDS = 24 * 3600;
 
 /**
@@ -67,6 +71,10 @@ export class TrendingService {
         where: {
           id: { in: ids },
           deletedAt: null,
+        },
+        include: {
+          user: true,
+          theme: true,
         },
       });
 
@@ -142,6 +150,10 @@ export class TrendingService {
         deletedAt: null,
         createdAt: { gte: twentyFourHoursAgo },
       },
+      include: {
+        user: true,
+        theme: true,
+      },
       orderBy: [
         { likeCount: "desc" },
         { repostCount: "desc" },
@@ -157,6 +169,10 @@ export class TrendingService {
     return this.db.quote.findMany({
       where: {
         deletedAt: null,
+      },
+      include: {
+        user: true,
+        theme: true,
       },
       orderBy: {
         createdAt: "desc",

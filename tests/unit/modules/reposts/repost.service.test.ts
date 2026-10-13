@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { RepostService } from "../../../../src/modules/reposts/services/repost.service";
 import { prisma } from "../../../../src/infrastructure/database/prisma";
 import * as outboxModule from "../../../../src/infrastructure/queue/outbox";
+import * as cacheModule from "../../../../src/infrastructure/redis/cache";
 import { NotFoundError } from "../../../../src/shared/errors/problem-details";
 
 describe("RepostService", () => {
@@ -324,6 +325,32 @@ describe("RepostService", () => {
       const result = await service.unrepostQuote(actorId, quoteId);
 
       expect(result).toEqual({ reposted: false, quoteId });
+    });
+
+    it("should invalidate quote cache only after transaction successfully commits", async () => {
+      const quoteId = "01925b6a-9321-789a-b456-123456789abc";
+      const actorId = "01925b6a-9321-789a-b456-actor0000000";
+      const ownerId = "01925b6a-9321-789a-b456-owner0000000";
+
+      mockTx.quote.findFirst.mockResolvedValueOnce({ id: quoteId, userId: ownerId });
+      mockTx.repost.create.mockResolvedValueOnce({});
+      mockTx.$executeRaw.mockResolvedValueOnce(1);
+
+      const callOrder: string[] = [];
+      vi.spyOn(prisma, "$transaction").mockImplementation(async (callback: any) => {
+        callOrder.push("tx-start");
+        const res = await callback(mockTx);
+        callOrder.push("tx-commit");
+        return res;
+      });
+      const invalidateSpy = vi.spyOn(cacheModule, "invalidateCache").mockImplementation(async () => {
+        callOrder.push("invalidate");
+      });
+
+      await service.repostQuote(actorId, quoteId);
+
+      expect(callOrder).toEqual(["tx-start", "tx-commit", "invalidate"]);
+      expect(invalidateSpy).toHaveBeenCalledWith(`cache:quote:${quoteId}`);
     });
   });
 });

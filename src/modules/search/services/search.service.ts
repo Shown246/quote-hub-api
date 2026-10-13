@@ -1,8 +1,10 @@
+import crypto from "crypto";
 import {
   SearchResult,
   SearchRepository,
   searchRepository,
 } from "../repositories/search.repository";
+import { getOrSetCache } from "../../../infrastructure/redis/cache";
 
 export { SearchResult };
 
@@ -13,6 +15,7 @@ export class SearchService {
 
   /**
    * Searches quotes, external authors, and user handles using PostgreSQL pg_trgm fuzzy matching.
+   * Caches ranked search results in Redis for 60 seconds by query hash and limit.
    *
    * @param query The search query string
    * @param limit Maximum results to return (clamped between 1 and 50, default 20)
@@ -36,7 +39,26 @@ export class SearchService {
         ? Math.max(1, Math.min(parsedLimit, 50))
         : 20;
 
-    return this.searchRepo.searchTrigram(sanitizedQuery, safeLimit);
+    const queryHash = crypto
+      .createHash("sha256")
+      .update(sanitizedQuery.toLowerCase())
+      .digest("hex")
+      .slice(0, 16);
+
+    const cacheKey = `cache:search:${queryHash}:${safeLimit}`;
+
+    const results = await getOrSetCache(cacheKey, 60, async () => {
+      return this.searchRepo.searchTrigram(sanitizedQuery, safeLimit);
+    });
+
+    if (Array.isArray(results)) {
+      return results.map((r) => ({
+        ...r,
+        createdAt: new Date(r.createdAt),
+      }));
+    }
+
+    return results;
   }
 }
 

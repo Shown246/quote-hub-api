@@ -3,12 +3,14 @@ import request from "supertest";
 import { createApp } from "../../src/app/app";
 import { prisma } from "../../src/infrastructure/database/prisma";
 import { searchService } from "../../src/modules/search/services/search.service";
+import { invalidateByPattern } from "../../src/infrastructure/redis/cache";
 
 describe("Search Routes Integration (GET /api/v1/search)", () => {
   const app = createApp();
 
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.restoreAllMocks();
+    await invalidateByPattern("cache:search:*");
   });
 
   it("should return 200 with empty data array when query parameter q is omitted", async () => {

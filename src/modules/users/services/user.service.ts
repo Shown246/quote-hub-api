@@ -8,6 +8,7 @@ import {
 } from "../../../shared/errors/problem-details";
 import { updateProfileSchema } from "../schemas/user.schemas";
 import { formatZodErrors } from "../../../shared/utils/zod";
+import { invalidateUserSessionCache } from "../../../middleware/auth";
 
 export class UserService {
   constructor(
@@ -52,7 +53,9 @@ export class UserService {
       throw new NotFoundError("Resource not found");
     }
 
-    return this.userRepo.updateProfile(userId, parseResult.data);
+    const updatedUser = await this.userRepo.updateProfile(userId, parseResult.data);
+    await invalidateUserSessionCache(userId);
+    return updatedUser;
   }
 
   /**
@@ -64,7 +67,7 @@ export class UserService {
    * @throws NotFoundError if the user does not exist or is already deleted
    */
   async softDeleteAccount(userId: string): Promise<User> {
-    return prisma.$transaction(async (tx) => {
+    const deletedUser = await prisma.$transaction(async (tx) => {
       const existingUser = await tx.user.findFirst({
         where: {
           id: userId,
@@ -76,7 +79,7 @@ export class UserService {
         throw new NotFoundError("Resource not found");
       }
 
-      const deletedUser = await tx.user.update({
+      const deleted = await tx.user.update({
         where: { id: userId },
         data: {
           status: UserStatus.DELETED,
@@ -86,8 +89,11 @@ export class UserService {
 
       await stageOutboxEvent(tx, "UserDeleted", "User", userId, { userId });
 
-      return deletedUser;
+      return deleted;
     });
+
+    await invalidateUserSessionCache(userId);
+    return deletedUser;
   }
 
   /**

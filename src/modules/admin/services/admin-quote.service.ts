@@ -2,6 +2,7 @@ import { Prisma, PrismaClient, Quote } from "@prisma/client";
 import { prisma } from "../../../infrastructure/database/prisma";
 import { AuditService, auditService } from "./audit.service";
 import { NotFoundError } from "../../../shared/errors/problem-details";
+import { invalidateCache } from "../../../infrastructure/redis/cache";
 
 export interface ListAdminQuotesOptions {
   limit?: number;
@@ -84,13 +85,13 @@ export class AdminQuoteService {
     quoteId: string,
     reason?: string
   ): Promise<Quote> {
-    return this.runTransaction(async (tx) => {
+    const updatedQuote = await this.runTransaction(async (tx) => {
       const existingQuote = await this.findQuoteById(quoteId, tx);
       if (!existingQuote || existingQuote.deletedAt !== null) {
         throw new NotFoundError("Quote not found");
       }
 
-      const updatedQuote = await this.executeSoftDelete(quoteId, tx);
+      const updated = await this.executeSoftDelete(quoteId, tx);
 
       await this.audit.recordAction(
         adminId,
@@ -101,8 +102,12 @@ export class AdminQuoteService {
         tx
       );
 
-      return updatedQuote;
+      return updated;
     });
+
+    await invalidateCache(`cache:quote:${quoteId}`);
+
+    return updatedQuote;
   }
 
   /**

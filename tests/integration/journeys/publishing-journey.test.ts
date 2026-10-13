@@ -4,6 +4,7 @@ import { createApp } from "../../../src/app/app";
 import { auth } from "../../../src/modules/auth/auth";
 import { prisma } from "../../../src/infrastructure/database/prisma";
 import { computeRequestHash } from "../../../src/middleware/idempotency";
+import { invalidateCache } from "../../../src/infrastructure/redis/cache";
 
 describe("E2E Journey 1: Publishing Lifecycle", () => {
   const app = createApp();
@@ -100,7 +101,7 @@ describe("E2E Journey 1: Publishing Lifecycle", () => {
   };
 
   const publishedQuote = {
-    id: "018f972b-5b3a-7d4e-8fa1-012345678901",
+    id: "018f972b-5b3a-7d4e-8fa1-012345678999",
     userId: authorUser.id,
     text: "Simplicity is prerequisite for reliability.",
     isOriginal: true,
@@ -113,8 +114,9 @@ describe("E2E Journey 1: Publishing Lifecycle", () => {
     deletedAt: null,
   };
 
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.restoreAllMocks();
+    await invalidateCache(`cache:quote:${publishedQuote.id}`);
   });
 
   describe("1. System Health Verification", () => {

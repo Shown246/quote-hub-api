@@ -3,6 +3,7 @@ import { prisma } from "../../../infrastructure/database/prisma";
 import { stageOutboxEvent } from "../../../infrastructure/queue/outbox";
 import { generateUuidV7 } from "../../../shared/utils/uuidv7";
 import { NotFoundError } from "../../../shared/errors/problem-details";
+import { invalidateCache } from "../../../infrastructure/redis/cache";
 
 export class RepostService {
   constructor(private readonly db: PrismaClient = prisma) {}
@@ -50,7 +51,7 @@ export class RepostService {
     quoteId: string
   ): Promise<{ reposted: boolean; quoteId: string }> {
     try {
-      return await this.runTransaction(async (tx) => {
+      const result = await this.runTransaction(async (tx) => {
         const quote = await this.findActiveQuote(quoteId, tx);
 
         if (!quote) {
@@ -101,6 +102,9 @@ export class RepostService {
 
         return { reposted: true, quoteId };
       });
+
+      await invalidateCache(`cache:quote:${quoteId}`);
+      return result;
     } catch (error: any) {
       if (
         (error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -126,7 +130,7 @@ export class RepostService {
     quoteId: string
   ): Promise<{ reposted: boolean; quoteId: string }> {
     try {
-      return await this.runTransaction(async (tx) => {
+      const result = await this.runTransaction(async (tx) => {
         const quote = await this.findActiveQuote(quoteId, tx);
 
         if (!quote) {
@@ -175,6 +179,9 @@ export class RepostService {
 
         return { reposted: false, quoteId };
       });
+
+      await invalidateCache(`cache:quote:${quoteId}`);
+      return result;
     } catch (error: any) {
       if (
         (error instanceof Prisma.PrismaClientKnownRequestError &&
