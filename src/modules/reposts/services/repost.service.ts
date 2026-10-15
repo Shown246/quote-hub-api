@@ -2,8 +2,9 @@ import { Prisma, PrismaClient } from "@prisma/client";
 import { prisma } from "../../../infrastructure/database/prisma";
 import { stageOutboxEvent } from "../../../infrastructure/queue/outbox";
 import { generateUuidV7 } from "../../../shared/utils/uuidv7";
-import { NotFoundError } from "../../../shared/errors/problem-details";
+import { NotFoundError, ValidationError } from "../../../shared/errors/problem-details";
 import { invalidateCache } from "../../../infrastructure/redis/cache";
+import { encodeCursor, decodeCursor } from "../../../shared/utils/cursor";
 
 export class RepostService {
   constructor(private readonly db: PrismaClient = prisma) {}
@@ -192,5 +193,112 @@ export class RepostService {
       }
       throw error;
     }
+  }
+
+  /**
+   * Retrieves quotes reposted by a specific user with cursor pagination.
+   * Resolves identifier by UUID or by username.
+   * Excludes soft-deleted quotes and accounts.
+   *
+   * @param identifier User ID (UUID) or username handle
+   * @param cursor Optional base64url cursor
+   * @param limit Maximum number of quotes to return (default 20, max 100)
+   * @throws NotFoundError if the user is not found or soft-deleted
+   * @throws ValidationError if the cursor is malformed
+   */
+  async listUserReposts(
+    identifier: string,
+    cursor?: string,
+    limit: number = 20
+  ): Promise<{
+    data: any[];
+    pagination: { nextCursor: string | null; hasMore: boolean };
+  }> {
+    const isUuid =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        identifier
+      );
+    let user = null;
+    if (isUuid) {
+      user = await this.db.user.findFirst({
+        where: { id: identifier, deletedAt: null, status: { not: "DELETED" } },
+      });
+    }
+    if (!user) {
+      user = await this.db.user.findFirst({
+        where: { username: identifier, deletedAt: null, status: { not: "DELETED" } },
+      });
+    }
+
+    if (!user) {
+      throw new NotFoundError("Resource not found");
+    }
+
+    const take = Math.max(1, Math.min(limit, 100));
+    let decodedCursor: { createdAt: Date; id: string } | undefined;
+    if (cursor) {
+      const decoded = decodeCursor(cursor);
+      if (!decoded) {
+        throw new ValidationError("Invalid pagination cursor");
+      }
+      decodedCursor = decoded;
+    }
+
+    const where: Prisma.RepostWhereInput = {
+      userId: user.id,
+      quote: {
+        deletedAt: null,
+      },
+    };
+
+    if (decodedCursor) {
+      where.OR = [
+        { createdAt: { lt: decodedCursor.createdAt } },
+        { createdAt: decodedCursor.createdAt, id: { lt: decodedCursor.id } },
+      ];
+    }
+
+    const rows = await this.db.repost.findMany({
+      where,
+      include: {
+        quote: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                username: true,
+                displayName: true,
+                profileImageUrl: true,
+              },
+            },
+            theme: true,
+          },
+        },
+      },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: take + 1,
+    });
+
+    const hasMore = rows.length > take;
+    const pagedRows = hasMore ? rows.slice(0, take) : rows;
+    let nextCursor: string | null = null;
+    if (hasMore && pagedRows.length > 0) {
+      const last = pagedRows[pagedRows.length - 1];
+      nextCursor = encodeCursor(last.createdAt, last.id);
+    }
+
+    const data = pagedRows.map((row) => ({
+      ...row.quote,
+      themeKey: row.quote.theme?.key,
+      reposted: true,
+    }));
+
+    return {
+      data,
+      pagination: {
+        nextCursor,
+        hasMore,
+      },
+    };
   }
 }

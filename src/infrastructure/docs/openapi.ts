@@ -414,6 +414,40 @@ export const openApiDoc: Record<string, any> = {
         },
       },
     },
+    "/api/v1/users/{userId}/reposts": {
+      get: {
+        summary: "Get quotes reposted by a user",
+        tags: ["Users", "Reposts"],
+        parameters: [
+          { name: "userId", in: "path", required: true, schema: { type: "string" } },
+          { name: "cursor", in: "query", required: false, schema: { type: "string" } },
+          { name: "limit", in: "query", required: false, schema: { type: "integer", default: 20 } },
+        ],
+        responses: {
+          "200": {
+            description: "List of reposted quotes with pagination",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    data: { type: "array", items: { $ref: "#/components/schemas/Quote" } },
+                    pagination: {
+                      type: "object",
+                      properties: {
+                        nextCursor: { type: "string", nullable: true },
+                        hasMore: { type: "boolean" },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          "404": { $ref: "#/components/responses/ProblemDetails" },
+        },
+      },
+    },
     "/api/v1/users/{userId}/follow": {
       post: {
         summary: "Follow user",

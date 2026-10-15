@@ -87,6 +87,34 @@ export class UserController {
   };
 
   /**
+   * Finalizes public username handle during onboarding.
+   * Identity is derived strictly from req.user.id.
+   * Returns a sanitized UserProfileResponse stripping internal fields.
+   */
+  finalizeUsername = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> => {
+    try {
+      if (!req.user) {
+        throw new AuthenticationError(
+          "Authentication required",
+          "AUTHENTICATION_REQUIRED"
+        );
+      }
+
+      const updatedUser = await this.userService.finalizeUsername(
+        req.user.id,
+        req.body?.username
+      );
+      res.status(200).json(toUserProfileResponse(updatedUser));
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /**
    * Validates avatar upload request body and generates a presigned R2 upload URL.
    * Identity is derived strictly from req.user.id.
    */

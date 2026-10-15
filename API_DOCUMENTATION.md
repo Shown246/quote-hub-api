@@ -844,6 +844,45 @@ Visual quote cards render with registered themes defining typography and visual 
 }
 ```
 
+##### `GET /api/v1/users/:userId/reposts`
+- **Auth**: Public
+- **Query Parameters**:
+  - `cursor` (Optional `string`): Base64url cursor
+  - `limit` (Optional `number`): 1 to 100 (Default: 20)
+- **Description**: Retrieves quotes reposted by a specific user (identified by UUID or username handle), ordered reverse-chronologically by repost time. Excludes soft-deleted quotes.
+- **Response `200 OK`**:
+```json
+{
+  "data": [
+    {
+      "id": "018f3a2c-2000-7000-8000-000000000001",
+      "userId": "018f3a2c-1000-7000-8000-000000000002",
+      "text": "The unexamined life is not worth living.",
+      "isOriginal": false,
+      "authorName": "Socrates",
+      "themeId": "018f3a2c-0000-7000-8000-000000000001",
+      "likeCount": 12,
+      "repostCount": 4,
+      "createdAt": "2026-03-01T10:00:00.000Z",
+      "updatedAt": "2026-03-01T10:00:00.000Z",
+      "deletedAt": null,
+      "user": {
+        "id": "018f3a2c-1000-7000-8000-000000000002",
+        "username": "alice",
+        "displayName": "Alice Smith",
+        "profileImageUrl": null
+      },
+      "themeKey": "classic-serif",
+      "reposted": true
+    }
+  ],
+  "pagination": {
+    "nextCursor": null,
+    "hasMore": false
+  }
+}
+```
+
 ---
 
 #### Bookmarks

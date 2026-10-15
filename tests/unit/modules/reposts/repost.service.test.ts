@@ -353,4 +353,106 @@ describe("RepostService", () => {
       expect(invalidateSpy).toHaveBeenCalledWith(`cache:quote:${quoteId}`);
     });
   });
+
+  describe("listUserReposts", () => {
+    const validUserId = "01925b6a-9321-789a-b456-123456789abc";
+    const mockUser = {
+      id: validUserId,
+      username: "alice",
+      status: "ACTIVE",
+      deletedAt: null,
+    };
+
+    it("should throw NotFoundError if user does not exist", async () => {
+      vi.spyOn(prisma.user, "findFirst").mockResolvedValueOnce(null);
+
+      await expect(service.listUserReposts("unknown-user")).rejects.toThrow(
+        "Resource not found"
+      );
+    });
+
+    it("should throw ValidationError if cursor is invalid", async () => {
+      vi.spyOn(prisma.user, "findFirst").mockResolvedValueOnce(mockUser as any);
+
+      await expect(
+        service.listUserReposts(validUserId, "invalid-cursor-string")
+      ).rejects.toThrow("Invalid pagination cursor");
+    });
+
+    it("should return empty array when user has no reposts", async () => {
+      vi.spyOn(prisma.user, "findFirst").mockResolvedValueOnce(mockUser as any);
+      vi.spyOn(prisma.repost, "findMany").mockResolvedValueOnce([]);
+
+      const result = await service.listUserReposts(validUserId);
+      expect(result).toEqual({
+        data: [],
+        pagination: {
+          nextCursor: null,
+          hasMore: false,
+        },
+      });
+    });
+
+    it("should return reposted quotes mapped with themeKey and reposted flag", async () => {
+      vi.spyOn(prisma.user, "findFirst").mockResolvedValueOnce(mockUser as any);
+
+      const mockQuote = {
+        id: "01925b6a-9321-789a-b456-quote0000001",
+        userId: "01925b6a-9321-789a-b456-author000000",
+        text: "Knowledge is power",
+        isOriginal: false,
+        authorName: "Francis Bacon",
+        themeId: "01925b6a-9321-789a-b456-theme0000000",
+        likeCount: 5,
+        repostCount: 2,
+        createdAt: new Date("2026-01-01T00:00:00.000Z"),
+        updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+        deletedAt: null,
+        user: {
+          id: "01925b6a-9321-789a-b456-author000000",
+          username: "francis",
+          displayName: "Francis B",
+          profileImageUrl: null,
+        },
+        theme: {
+          id: "01925b6a-9321-789a-b456-theme0000000",
+          key: "classic-serif",
+          name: "Classic Serif",
+          isActive: true,
+        },
+      };
+
+      const mockRepostRows = [
+        {
+          id: "01925b6a-9321-789a-b456-repost000001",
+          userId: validUserId,
+          quoteId: mockQuote.id,
+          createdAt: new Date("2026-01-02T00:00:00.000Z"),
+          quote: mockQuote,
+        },
+      ];
+
+      vi.spyOn(prisma.repost, "findMany").mockResolvedValueOnce(mockRepostRows as any);
+
+      const result = await service.listUserReposts(validUserId);
+      expect(result.data).toHaveLength(1);
+      expect(result.data[0].id).toBe(mockQuote.id);
+      expect(result.data[0].text).toBe("Knowledge is power");
+      expect(result.data[0].themeKey).toBe("classic-serif");
+      expect(result.data[0].reposted).toBe(true);
+      expect(result.pagination.hasMore).toBe(false);
+      expect(result.pagination.nextCursor).toBeNull();
+    });
+
+    it("should find user by username when identifier is not a UUID", async () => {
+      vi.spyOn(prisma.user, "findFirst").mockResolvedValueOnce(mockUser as any);
+      vi.spyOn(prisma.repost, "findMany").mockResolvedValueOnce([]);
+
+      const result = await service.listUserReposts("alice");
+      expect(result.data).toEqual([]);
+      expect(prisma.user.findFirst).toHaveBeenCalledWith({
+        where: { username: "alice", deletedAt: null, status: { not: "DELETED" } },
+      });
+    });
+  });
 });

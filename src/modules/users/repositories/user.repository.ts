@@ -1,4 +1,4 @@
-import { Prisma, PrismaClient, User, UserStatus } from "@prisma/client";
+import { Prisma, PrismaClient, User, UserRole, UserStatus } from "@prisma/client";
 import { prisma } from "../../../infrastructure/database/prisma";
 import { generateUuidV7 } from "../../../shared/utils/uuidv7";
 import { ConflictError } from "../../../shared/errors/problem-details";
@@ -10,6 +10,8 @@ export interface CreateUserData {
   displayName: string;
   bio?: string | null;
   profileImageUrl?: string | null;
+  role?: UserRole;
+  status?: UserStatus;
 }
 
 export interface UpdateProfileData {
@@ -104,15 +106,19 @@ export class UserRepository implements IUserRepository {
     const id = data.id ?? generateUuidV7();
 
     try {
+      const createData: Prisma.UserUncheckedCreateInput = {
+        id,
+        authId: data.authId ?? null,
+        username: data.username,
+        displayName: data.displayName,
+        bio: data.bio ?? null,
+        profileImageUrl: data.profileImageUrl ?? null,
+        ...(data.role ? { role: data.role } : {}),
+        ...(data.status ? { status: data.status } : {}),
+      };
+
       return await this.db.user.create({
-        data: {
-          id,
-          authId: data.authId ?? null,
-          username: data.username,
-          displayName: data.displayName,
-          bio: data.bio ?? null,
-          profileImageUrl: data.profileImageUrl ?? null,
-        },
+        data: createData,
       });
     } catch (error) {
       if (

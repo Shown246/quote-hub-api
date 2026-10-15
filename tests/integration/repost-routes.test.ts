@@ -304,4 +304,86 @@ describe("Repost Routes Integration", () => {
       expect(stageOutboxSpy).not.toHaveBeenCalled();
     });
   });
+
+  describe("GET /api/v1/users/:userId/reposts", () => {
+    it("should return 404 when target user is not found", async () => {
+      vi.spyOn(prisma.user, "findFirst").mockResolvedValueOnce(null);
+
+      const res = await request(app).get(`/api/v1/users/non-existent-user/reposts`);
+      expect(res.status).toBe(404);
+      expect(res.body.code).toBe("NOT_FOUND");
+    });
+
+    it("should return 200 with paginated reposts list for valid user UUID", async () => {
+      vi.spyOn(prisma.user, "findFirst").mockResolvedValueOnce(mockDomainUser as any);
+      const mockQuote = {
+        id: quoteId,
+        userId: authorId,
+        text: "The only true wisdom is in knowing you know nothing.",
+        isOriginal: false,
+        authorName: "Socrates",
+        themeId: "01925b6a-9321-789a-b456-theme0000000",
+        likeCount: 15,
+        repostCount: 4,
+        createdAt: new Date("2026-01-01T00:00:00.000Z"),
+        updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+        deletedAt: null,
+        user: {
+          id: authorId,
+          username: "socrates",
+          displayName: "Socrates",
+          profileImageUrl: null,
+        },
+        theme: {
+          id: "01925b6a-9321-789a-b456-theme0000000",
+          key: "classic-serif",
+          name: "Classic Serif",
+          isActive: true,
+        },
+      };
+
+      vi.spyOn(prisma.repost, "findMany").mockResolvedValueOnce([
+        {
+          id: "01925b6a-9321-789a-b456-repost000001",
+          userId: mockDomainUser.id,
+          quoteId: mockQuote.id,
+          createdAt: new Date("2026-01-02T00:00:00.000Z"),
+          quote: mockQuote,
+        },
+      ] as any);
+
+      const res = await request(app).get(`/api/v1/users/${mockDomainUser.id}/reposts`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.data).toHaveLength(1);
+      expect(res.body.data[0].id).toBe(quoteId);
+      expect(res.body.data[0].text).toBe(mockQuote.text);
+      expect(res.body.data[0].reposted).toBe(true);
+      expect(res.body.pagination).toBeDefined();
+    });
+
+    it("should return 200 with reposts when queried by username", async () => {
+      vi.spyOn(prisma.user, "findFirst").mockResolvedValueOnce(mockDomainUser as any);
+      vi.spyOn(prisma.repost, "findMany").mockResolvedValueOnce([]);
+
+      const res = await request(app).get(`/api/v1/users/${mockDomainUser.username}/reposts`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.data).toEqual([]);
+      expect(res.body.pagination.hasMore).toBe(false);
+    });
+
+    it("should return 200 when querying via GET /api/v1/quotes?userId=...&type=reposts", async () => {
+      vi.spyOn(prisma.user, "findFirst").mockResolvedValueOnce(mockDomainUser as any);
+      vi.spyOn(prisma.repost, "findMany").mockResolvedValueOnce([]);
+
+      const res = await request(app).get(
+        `/api/v1/quotes?userId=${mockDomainUser.id}&type=reposts`
+      );
+
+      expect(res.status).toBe(200);
+      expect(res.body.data).toEqual([]);
+      expect(res.body.pagination.hasMore).toBe(false);
+    });
+  });
 });
