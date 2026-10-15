@@ -125,4 +125,91 @@ describe("Resend Email Infrastructure", () => {
     const result = await sendVerificationEmail("user@example.com", "https://quote-hub.local/verify?token=abc");
     expect(result).toBe(false);
   });
+
+  it("sends verification email using Nodemailer when SMTP is configured", async () => {
+    const mockSendMail = vi.fn().mockResolvedValue({ messageId: "msg-123" });
+    vi.doMock("nodemailer", () => ({
+      default: {
+        createTransport: vi.fn().mockReturnValue({
+          sendMail: mockSendMail,
+        }),
+      },
+    }));
+
+    vi.doMock("../../../src/app/config/env", () => ({
+      env: {
+        SMTP_USER: "test@gmail.com",
+        SMTP_PASS: "mockpass1234",
+        EMAIL_FROM: "Quote-Hub <noreply@quote-hub.local>",
+      },
+    }));
+
+    const { sendVerificationEmail } = await import("../../../src/infrastructure/email/resend");
+    const result = await sendVerificationEmail("user@example.com", "https://quote-hub.local/verify?token=abc");
+
+    expect(result).toBe(true);
+    expect(mockSendMail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        from: '"Quote-Hub" <test@gmail.com>',
+        to: "user@example.com",
+        subject: expect.stringContaining("Verify"),
+      })
+    );
+  });
+
+  it("sends password reset email using Nodemailer when SMTP is configured", async () => {
+    const mockSendMail = vi.fn().mockResolvedValue({ messageId: "msg-456" });
+    vi.doMock("nodemailer", () => ({
+      default: {
+        createTransport: vi.fn().mockReturnValue({
+          sendMail: mockSendMail,
+        }),
+      },
+    }));
+
+    vi.doMock("../../../src/app/config/env", () => ({
+      env: {
+        SMTP_USER: "test@gmail.com",
+        SMTP_PASS: "mockpass1234",
+        EMAIL_FROM: "Quote-Hub <noreply@quote-hub.local>",
+      },
+    }));
+
+    const { sendPasswordResetEmail } = await import("../../../src/infrastructure/email/resend");
+    const result = await sendPasswordResetEmail("user@example.com", "https://quote-hub.local/reset?token=xyz");
+
+    expect(result).toBe(true);
+    expect(mockSendMail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        from: '"Quote-Hub" <test@gmail.com>',
+        to: "user@example.com",
+        subject: expect.stringContaining("Reset"),
+      })
+    );
+  });
+
+  it("handles Nodemailer send error gracefully and returns false", async () => {
+    const mockSendMail = vi.fn().mockRejectedValue(new Error("SMTP connection error"));
+    vi.doMock("nodemailer", () => ({
+      default: {
+        createTransport: vi.fn().mockReturnValue({
+          sendMail: mockSendMail,
+        }),
+      },
+    }));
+
+    vi.doMock("../../../src/app/config/env", () => ({
+      env: {
+        SMTP_USER: "test@gmail.com",
+        SMTP_PASS: "mockpass1234",
+        EMAIL_FROM: "Quote-Hub <noreply@quote-hub.local>",
+      },
+    }));
+
+    const { sendVerificationEmail } = await import("../../../src/infrastructure/email/resend");
+    const result = await sendVerificationEmail("user@example.com", "https://quote-hub.local/verify?token=abc");
+
+    expect(result).toBe(false);
+  });
 });
+

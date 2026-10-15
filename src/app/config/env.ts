@@ -1,11 +1,23 @@
 import { z } from "zod";
+import fs from "node:fs";
+import path from "node:path";
 
 // Load .env file if available (Node.js 20+ built-in support)
 if (process.env.NODE_ENV !== "test" && typeof process.loadEnvFile === "function") {
-  try {
-    process.loadEnvFile();
-  } catch {
-    // Ignore error if .env file does not exist (e.g. configured via environment)
+  const candidates = [
+    path.resolve(process.cwd(), ".env"),
+    path.resolve(__dirname, "../../../.env"),
+    path.resolve(__dirname, "../../.env"),
+  ];
+  for (const file of candidates) {
+    if (fs.existsSync(file)) {
+      try {
+        process.loadEnvFile(file);
+        break;
+      } catch {
+        // Continue checking other candidates
+      }
+    }
   }
 }
 
@@ -27,6 +39,8 @@ export const envSchema = z.object({
   SENTRY_DSN: z.string().optional(),
   RESEND_API_KEY: z.string().optional(),
   EMAIL_FROM: z.string().default("Quote-Hub <noreply@quote-hub.local>"),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASS: z.string().optional(),
 });
 
 export type EnvConfig = z.infer<typeof envSchema>;

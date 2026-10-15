@@ -343,9 +343,19 @@ export async function seedDatabase(client: PrismaClient = defaultPrisma): Promis
   // 9. Reconcile counters via PostgreSQL procedure
   try {
     await client.$executeRawUnsafe("CALL reconcile_all_counters();");
-    logger.info("Denormalized counters reconciled successfully");
   } catch (err) {
     logger.warn({ err }, "Could not run reconcile_all_counters stored procedure (may not exist in mock env)");
+  }
+
+  // 10. Invalidate theme caches in Redis
+  try {
+    const { invalidateCache } = await import("../src/infrastructure/redis/cache");
+    await invalidateCache("cache:themes:active");
+    for (const theme of SEED_THEMES) {
+      await invalidateCache(`cache:theme:${theme.id}`);
+    }
+  } catch {
+    // Redis might be unavailable during certain seed invocations
   }
 
   logger.info("Database seeding successfully completed!");
