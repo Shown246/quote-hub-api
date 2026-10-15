@@ -21,7 +21,12 @@ export const helmetMiddleware: RequestHandler = helmet({
       scriptSrc: ["'self'", "'unsafe-inline'"],
       scriptSrcAttr: ["'none'"],
       styleSrc: ["'self'", "https:", "'unsafe-inline'"],
-      connectSrc: ["'self'", env.FRONTEND_ORIGIN],
+      connectSrc: [
+        "'self'",
+        env.FRONTEND_ORIGIN,
+        "https://*.trycloudflare.com",
+        "https://*.vercel.app",
+      ],
       upgradeInsecureRequests: [],
     },
   },
@@ -33,15 +38,51 @@ export const helmetMiddleware: RequestHandler = helmet({
   },
 });
 
-const ALLOWED_ORIGINS = new Set([
+export const ALLOWED_ORIGINS = new Set([
   env.FRONTEND_ORIGIN,
   "http://localhost:3000",
   "http://127.0.0.1:3000",
 ]);
 
+export function isAllowedOrigin(origin: string): boolean {
+  if (ALLOWED_ORIGINS.has(origin)) {
+    return true;
+  }
+
+  try {
+    const url = new URL(origin);
+    const hostname = url.hostname.toLowerCase();
+
+    // Allow Cloudflare quick tunnels (*.trycloudflare.com)
+    if (url.protocol === "https:" && hostname.endsWith(".trycloudflare.com")) {
+      return true;
+    }
+
+    // Allow Vercel deployments and branch previews (*.vercel.app)
+    if (
+      url.protocol === "https:" &&
+      (hostname === "vercel.app" || hostname.endsWith(".vercel.app"))
+    ) {
+      return true;
+    }
+
+    // Allow loopback origins with any port in development
+    if (
+      (hostname === "localhost" || hostname === "127.0.0.1") &&
+      (url.protocol === "http:" || url.protocol === "https:")
+    ) {
+      return true;
+    }
+  } catch {
+    return false;
+  }
+
+  return false;
+}
+
 export const corsMiddleware: RequestHandler = cors({
   origin: (origin, callback) => {
-    if (!origin || ALLOWED_ORIGINS.has(origin)) {
+    if (!origin || isAllowedOrigin(origin)) {
       callback(null, true);
     } else {
       callback(new Error("Not allowed by CORS"));

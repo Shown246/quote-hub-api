@@ -4,6 +4,45 @@ import { env } from "../../app/config/env";
 import { prisma } from "../../infrastructure/database/prisma";
 import { sendVerificationEmail, sendPasswordResetEmail } from "../../infrastructure/email/resend";
 import { logger } from "../../infrastructure/logging/logger";
+import { isAllowedOrigin } from "../../middleware/security";
+
+const betterAuthUrlParsed = (() => {
+  try {
+    return new URL(env.BETTER_AUTH_URL);
+  } catch {
+    return undefined;
+  }
+})();
+
+const allowedHosts = [
+  "*.trycloudflare.com",
+  "localhost",
+  "localhost:*",
+  "127.0.0.1",
+  "127.0.0.1:*",
+  ...(betterAuthUrlParsed ? [betterAuthUrlParsed.host, betterAuthUrlParsed.hostname] : []),
+];
+
+export function resolveFrontendOrigin(request?: Request): string {
+  if (request && typeof request.headers?.get === "function") {
+    const origin = request.headers.get("origin");
+    if (origin && isAllowedOrigin(origin)) {
+      return origin;
+    }
+    const referer = request.headers.get("referer");
+    if (referer) {
+      try {
+        const refererOrigin = new URL(referer).origin;
+        if (isAllowedOrigin(refererOrigin)) {
+          return refererOrigin;
+        }
+      } catch {
+        // Ignore invalid referer URL
+      }
+    }
+  }
+  return env.FRONTEND_ORIGIN;
+}
 
 export const auth = betterAuth({
   database: prismaAdapter(prisma, {
@@ -30,30 +69,46 @@ export const auth = betterAuth({
     modelName: "authVerification",
   },
   secret: env.BETTER_AUTH_SECRET,
-  baseURL: env.BETTER_AUTH_URL,
+  baseURL: {
+    allowedHosts,
+    fallback: env.BETTER_AUTH_URL,
+    protocol: "auto",
+  },
   trustedOrigins: [
     env.FRONTEND_ORIGIN,
     "http://localhost:3000",
     "http://127.0.0.1:3000",
+    "https://*.trycloudflare.com",
+    "https://*.vercel.app",
   ],
+  advanced: {
+    trustedProxyHeaders: true,
+    defaultCookieAttributes: {
+      sameSite: "none",
+      secure: true,
+    },
+  },
   emailAndPassword: {
     enabled: true,
     requireEmailVerification: env.NODE_ENV === "production",
-    sendResetPassword: async ({ user, url, token }: any) => {
+    sendResetPassword: async ({ user, url, token }: any, request?: Request) => {
+      const frontendOrigin = resolveFrontendOrigin(request);
       const resetUrl = token
-        ? `${env.FRONTEND_ORIGIN}/reset-password?token=${token}`
+        ? `${frontendOrigin}/reset-password?token=${token}`
         : url;
+      logger.info({ email: user.email, resetUrl }, "Triggering password reset dispatch");
       await sendPasswordResetEmail(user.email, resetUrl);
     },
   },
   emailVerification: {
     sendOnSignUp: true,
     autoSignInAfterVerification: true,
-    sendVerificationEmail: async ({ user, url, token }: any) => {
+    sendVerificationEmail: async ({ user, url, token }: any, request?: Request) => {
+      const frontendOrigin = resolveFrontendOrigin(request);
       const verificationUrl = token
-        ? `${env.FRONTEND_ORIGIN}/verify-email?token=${token}`
+        ? `${frontendOrigin}/verify-email?token=${token}`
         : url;
-      logger.info({ email: user.email }, "Triggering email verification dispatch");
+      logger.info({ email: user.email, verificationUrl }, "Triggering email verification dispatch");
       await sendVerificationEmail(user.email, verificationUrl);
     },
   },
