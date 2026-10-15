@@ -81,7 +81,7 @@ export class TrendingService {
       const quoteMap = new Map(quotes.map((q) => [q.id, q]));
       const orderedQuotes = ids
         .map((id) => quoteMap.get(id))
-        .filter((q): q is Quote => q !== undefined);
+        .filter((q): q is (typeof quotes)[number] => q !== undefined);
 
       if (orderedQuotes.length > 0) {
         return orderedQuotes;

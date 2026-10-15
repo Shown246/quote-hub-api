@@ -170,6 +170,22 @@ describe("QuoteService", () => {
       ).rejects.toThrow(ValidationError);
       expect(mockQuoteRepo.create).not.toHaveBeenCalled();
     });
+
+    it("should throw NotFoundError when quote creation encounters foreign key violation (P2003)", async () => {
+      vi.mocked(mockThemeRepo.findById).mockResolvedValueOnce(validTheme);
+      const p2003Error = Object.assign(new Error("Foreign key constraint violated: fk_quotes_themes"), {
+        code: "P2003",
+      });
+      vi.mocked(mockQuoteRepo.create).mockRejectedValueOnce(p2003Error);
+
+      await expect(
+        service.createQuote(sampleQuote.userId, {
+          text: "Foreign key test quote",
+          isOriginal: true,
+          themeId: validTheme.id,
+        })
+      ).rejects.toThrow(NotFoundError);
+    });
   });
 
   describe("getQuoteById", () => {

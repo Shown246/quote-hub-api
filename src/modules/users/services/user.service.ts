@@ -3,11 +3,13 @@ import { UserRepository } from "../repositories/user.repository";
 import { prisma } from "../../../infrastructure/database/prisma";
 import { stageOutboxEvent } from "../../../infrastructure/queue/outbox";
 import {
+  ConflictError,
   NotFoundError,
   ValidationError,
 } from "../../../shared/errors/problem-details";
-import { updateProfileSchema } from "../schemas/user.schemas";
+import { updateProfileSchema, usernameSchema } from "../schemas/user.schemas";
 import { formatZodErrors } from "../../../shared/utils/zod";
+import { generateUuidV7 } from "../../../shared/utils/uuidv7";
 import { invalidateUserSessionCache } from "../../../middleware/auth";
 
 export class UserService {
@@ -121,4 +123,118 @@ export class UserService {
       key,
     };
   }
+
+  /**
+   * Generates a candidate username conforming to usernameSchema (^[a-zA-Z0-9_]{3,30}$).
+   */
+  generateCandidateUsername(name?: string | null, email?: string | null): string {
+    let base = "";
+    if (name) {
+      base = name
+        .toLowerCase()
+        .replace(/[^a-z0-9_]/g, "_")
+        .replace(/^_+|_+$/g, "")
+        .replace(/_{2,}/g, "_");
+    }
+    if ((!base || base.length < 3) && email) {
+      const emailPrefix = email.split("@")[0];
+      base = emailPrefix
+        .toLowerCase()
+        .replace(/[^a-z0-9_]/g, "_")
+        .replace(/^_+|_+$/g, "")
+        .replace(/_{2,}/g, "_");
+    }
+    if (!base || base.length < 3) {
+      base = "user";
+    }
+    return base.slice(0, 20);
+  }
+
+  /**
+   * Ensures an active domain User exists for the given authId.
+   * Auto-provisions from AuthUser data if not yet created.
+   */
+  async ensureDomainUserForAuth(
+    authId: string,
+    fallbackName?: string | null,
+    fallbackEmail?: string | null,
+    fallbackImage?: string | null
+  ): Promise<User> {
+    const existing = await prisma.user.findFirst({
+      where: { authId },
+    });
+    if (existing) {
+      return existing;
+    }
+
+    const authUser = await prisma.authUser.findUnique({
+      where: { id: authId },
+    });
+
+    const name = fallbackName || authUser?.name || "";
+    const email = fallbackEmail || authUser?.email || "";
+    const image =
+      fallbackImage !== undefined ? fallbackImage : authUser?.image || null;
+
+    const baseHandle = this.generateCandidateUsername(name, email);
+    let candidateUsername = baseHandle;
+    let attempt = 0;
+
+    while (attempt < 10) {
+      const existingUser = await this.userRepo.findByUsername(candidateUsername, true);
+      if (!existingUser) {
+        break;
+      }
+      attempt++;
+      const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+      candidateUsername = `${baseHandle.slice(0, 24)}_${randomSuffix}`;
+    }
+
+    try {
+      return await this.userRepo.create({
+        id: generateUuidV7(),
+        authId,
+        username: candidateUsername,
+        displayName: (name && name.trim()) || candidateUsername,
+        profileImageUrl: image || null,
+        role: "USER",
+        status: "ACTIVE",
+      });
+    } catch (err: any) {
+      const raceExisting = await prisma.user.findFirst({
+        where: { authId },
+      });
+      if (raceExisting) {
+        return raceExisting;
+      }
+      throw err;
+    }
+  }
+
+  /**
+   * Finalizes public username during onboarding or first-time setup.
+   * Conforms to username validation rules and ensures handle uniqueness.
+   */
+  async finalizeUsername(userId: string, rawUsername: unknown): Promise<User> {
+    const parseResult = usernameSchema.safeParse(rawUsername);
+    if (!parseResult.success) {
+      throw new ValidationError(
+        "Validation failed",
+        formatZodErrors(parseResult.error)
+      );
+    }
+    const username = parseResult.data;
+    const existing = await this.userRepo.findByUsername(username);
+    if (existing && existing.id !== userId) {
+      throw new ConflictError("Username is already taken");
+    }
+
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: { username },
+    });
+    await invalidateUserSessionCache(userId);
+    return updatedUser;
+  }
 }
+

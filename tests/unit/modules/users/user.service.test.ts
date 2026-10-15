@@ -326,4 +326,95 @@ describe("UserService", () => {
       expect(outboxModule.stageOutboxEvent).not.toHaveBeenCalled();
     });
   });
+
+  describe("generateCandidateUsername", () => {
+    it("should generate a clean lowercase alphanumeric username from name", () => {
+      expect(service.generateCandidateUsername("John Doe")).toBe("john_doe");
+      expect(service.generateCandidateUsername("Alice")).toBe("alice");
+      expect(service.generateCandidateUsername("Bob 123 !@#")).toBe("bob_123");
+    });
+
+    it("should fall back to email prefix if name is empty", () => {
+      expect(service.generateCandidateUsername("", "charlie@example.com")).toBe("charlie");
+      expect(service.generateCandidateUsername(null, "test.user@quote-hub.local")).toBe("test_user");
+    });
+
+    it("should fall back to user prefix if both are too short or empty", () => {
+      expect(service.generateCandidateUsername("ab")).toBe("user");
+      expect(service.generateCandidateUsername("", "a@b.com")).toBe("user");
+    });
+  });
+
+  describe("finalizeUsername", () => {
+    it("should reject invalid username formats", async () => {
+      await expect(service.finalizeUsername(dummyUser.id, "ab")).rejects.toThrow("Validation failed");
+      await expect(service.finalizeUsername(dummyUser.id, "invalid-username!")).rejects.toThrow("Validation failed");
+    });
+
+    it("should throw ConflictError if username is taken by another user", async () => {
+      vi.spyOn(mockRepo, "findByUsername").mockResolvedValueOnce({
+        ...dummyUser,
+        id: "another-user-id",
+        username: "taken_name",
+      });
+
+      await expect(service.finalizeUsername(dummyUser.id, "taken_name")).rejects.toThrow(
+        "Username is already taken"
+      );
+    });
+
+    it("should update and return user if username is valid and available", async () => {
+      vi.spyOn(mockRepo, "findByUsername").mockResolvedValueOnce(null);
+      vi.spyOn(prisma.user, "update").mockResolvedValueOnce({
+        ...dummyUser,
+        username: "new_handle",
+      });
+
+      const updated = await service.finalizeUsername(dummyUser.id, "new_handle");
+      expect(updated.username).toBe("new_handle");
+      expect(prisma.user.update).toHaveBeenCalledWith({
+        where: { id: dummyUser.id },
+        data: { username: "new_handle" },
+      });
+    });
+  });
+
+  describe("ensureDomainUserForAuth", () => {
+    it("should return existing domain user if already present", async () => {
+      vi.spyOn(prisma.user, "findFirst").mockResolvedValueOnce(dummyUser);
+
+      const result = await service.ensureDomainUserForAuth(dummyUser.authId!);
+      expect(result).toEqual(dummyUser);
+      expect(mockRepo.create).not.toHaveBeenCalled();
+    });
+
+    it("should create new domain user if not present", async () => {
+      vi.spyOn(prisma.user, "findFirst").mockResolvedValueOnce(null);
+      vi.spyOn(prisma.authUser, "findUnique").mockResolvedValueOnce({
+        id: "auth-123",
+        name: "Test User",
+        email: "test@example.com",
+        image: null,
+      } as any);
+      vi.spyOn(mockRepo, "findByUsername").mockResolvedValueOnce(null);
+      vi.spyOn(mockRepo, "create").mockResolvedValueOnce({
+        ...dummyUser,
+        authId: "auth-123",
+        username: "test_user",
+        displayName: "Test User",
+      });
+
+      const result = await service.ensureDomainUserForAuth("auth-123");
+      expect(result.username).toBe("test_user");
+      expect(mockRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          authId: "auth-123",
+          username: "test_user",
+          displayName: "Test User",
+          role: "USER",
+          status: "ACTIVE",
+        })
+      );
+    });
+  });
 });

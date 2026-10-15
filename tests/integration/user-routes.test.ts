@@ -123,6 +123,63 @@ describe("User Routes Integration", () => {
     });
   });
 
+  describe("POST /api/v1/users/me/username", () => {
+    it("should return 401 when unauthenticated", async () => {
+      vi.spyOn(auth.api, "getSession").mockResolvedValueOnce(null as any);
+
+      const res = await request(app)
+        .post("/api/v1/users/me/username")
+        .send({ username: "myhandle" });
+
+      expect(res.status).toBe(401);
+      expect(res.body.code).toBe("AUTHENTICATION_REQUIRED");
+    });
+
+    it("should return 400 when username format is invalid", async () => {
+      vi.spyOn(auth.api, "getSession").mockResolvedValueOnce(mockSession as any);
+      vi.spyOn(prisma.user, "findFirst").mockResolvedValueOnce(mockDomainUser as any);
+
+      const res = await request(app)
+        .post("/api/v1/users/me/username")
+        .send({ username: "in" }); // too short
+
+      expect(res.status).toBe(400);
+      expect(res.body.code).toBe("VALIDATION_ERROR");
+    });
+
+    it("should return 409 when username is already taken", async () => {
+      vi.spyOn(auth.api, "getSession").mockResolvedValueOnce(mockSession as any);
+      vi.spyOn(prisma.user, "findFirst")
+        .mockResolvedValueOnce(mockDomainUser as any) // requireAuth
+        .mockResolvedValueOnce({ ...mockDomainUser, id: "other-id", username: "taken" } as any); // findByUsername
+
+      const res = await request(app)
+        .post("/api/v1/users/me/username")
+        .send({ username: "taken" });
+
+      expect(res.status).toBe(409);
+      expect(res.body.code).toBe("CONFLICT");
+    });
+
+    it("should return 200 with updated profile when valid", async () => {
+      vi.spyOn(auth.api, "getSession").mockResolvedValueOnce(mockSession as any);
+      vi.spyOn(prisma.user, "findFirst")
+        .mockResolvedValueOnce(mockDomainUser as any) // requireAuth
+        .mockResolvedValueOnce(null); // findByUsername
+      vi.spyOn(prisma.user, "update").mockResolvedValueOnce({
+        ...mockDomainUser,
+        username: "new_valid_handle",
+      } as any);
+
+      const res = await request(app)
+        .post("/api/v1/users/me/username")
+        .send({ username: "new_valid_handle" });
+
+      expect(res.status).toBe(200);
+      expect(res.body.username).toBe("new_valid_handle");
+    });
+  });
+
   describe("PATCH /api/v1/users/me", () => {
     it("should return 401 when unauthenticated", async () => {
       vi.spyOn(auth.api, "getSession").mockResolvedValueOnce(null as any);

@@ -1,4 +1,4 @@
-import { Quote } from "@prisma/client";
+import { Prisma, Quote } from "@prisma/client";
 import { QuoteRepository } from "../repositories/quote.repository";
 import { ThemeRepository } from "../../themes/repositories/theme.repository";
 import { generateUuidV7 } from "../../../shared/utils/uuidv7";
@@ -12,12 +12,14 @@ import { decodeCursor } from "../../../shared/utils/cursor";
 import { safeRedisCall } from "../../../infrastructure/redis/redis";
 import { getOrSetCache, invalidateCache } from "../../../infrastructure/redis/cache";
 import { TRENDING_REDIS_KEY } from "../../trending/services/trending.service";
+import { RepostService } from "../../reposts/services/repost.service";
 
 export class QuoteService {
   constructor(
     private readonly quoteRepo: QuoteRepository = new QuoteRepository(),
     private readonly themeRepo: ThemeRepository = new ThemeRepository(),
-    private readonly safeCall: typeof safeRedisCall = safeRedisCall
+    private readonly safeCall: typeof safeRedisCall = safeRedisCall,
+    private readonly repostService: RepostService = new RepostService()
   ) {}
 
   /**
@@ -43,14 +45,27 @@ export class QuoteService {
 
     const id = generateUuidV7();
 
-    return this.quoteRepo.create({
-      id,
-      userId,
-      text: dto.text,
-      isOriginal: dto.isOriginal,
-      authorName: dto.isOriginal ? null : (dto.authorName ?? null),
-      themeId: dto.themeId,
-    });
+    try {
+      return await this.quoteRepo.create({
+        id,
+        userId,
+        text: dto.text,
+        isOriginal: dto.isOriginal,
+        authorName: dto.isOriginal ? null : (dto.authorName ?? null),
+        themeId: dto.themeId,
+      });
+    } catch (error: any) {
+      if (
+        (error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === "P2003") ||
+        error?.code === "P2003"
+      ) {
+        await invalidateCache(`cache:theme:${dto.themeId}`);
+        await invalidateCache("cache:themes:active");
+        throw new NotFoundError("Theme not found");
+      }
+      throw error;
+    }
   }
 
   /**
@@ -118,14 +133,29 @@ export class QuoteService {
       }
     }
 
-    const updated = await this.quoteRepo.update(id, {
-      text: dto.text,
-      themeId: dto.themeId,
-    });
+    try {
+      const updated = await this.quoteRepo.update(id, {
+        text: dto.text,
+        themeId: dto.themeId,
+      });
 
-    await invalidateCache(`cache:quote:${id}`);
+      await invalidateCache(`cache:quote:${id}`);
 
-    return updated;
+      return updated;
+    } catch (error: any) {
+      if (
+        (error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === "P2003") ||
+        error?.code === "P2003"
+      ) {
+        if (dto.themeId) {
+          await invalidateCache(`cache:theme:${dto.themeId}`);
+          await invalidateCache("cache:themes:active");
+        }
+        throw new NotFoundError("Theme not found");
+      }
+      throw error;
+    }
   }
 
   /**
@@ -175,6 +205,14 @@ export class QuoteService {
     data: Quote[];
     pagination: { nextCursor: string | null; hasMore: boolean };
   }> {
+    if (query.type === "reposts" && query.userId) {
+      return this.repostService.listUserReposts(
+        query.userId,
+        query.cursor,
+        query.limit
+      );
+    }
+
     const limit = Math.max(1, Math.min(query.limit ?? 20, 100));
     let decodedCursor: { createdAt: Date; id: string } | undefined;
     if (query.cursor) {

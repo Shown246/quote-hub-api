@@ -33,9 +33,15 @@ export const helmetMiddleware: RequestHandler = helmet({
   },
 });
 
+const ALLOWED_ORIGINS = new Set([
+  env.FRONTEND_ORIGIN,
+  "http://localhost:3000",
+  "http://127.0.0.1:3000",
+]);
+
 export const corsMiddleware: RequestHandler = cors({
   origin: (origin, callback) => {
-    if (!origin || origin === env.FRONTEND_ORIGIN) {
+    if (!origin || ALLOWED_ORIGINS.has(origin)) {
       callback(null, true);
     } else {
       callback(new Error("Not allowed by CORS"));

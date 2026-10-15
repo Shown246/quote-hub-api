@@ -82,6 +82,7 @@ export const quoteQuerySchema = z
     cursor: z.string().min(1, "Cursor must not be empty").optional(),
     userId: z.string().uuid("Invalid user ID format").optional(),
     themeId: z.string().uuid("Invalid theme ID format").optional(),
+    type: z.enum(["quotes", "reposts"]).optional(),
   })
   .strict();
 
