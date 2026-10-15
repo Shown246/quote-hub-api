@@ -28,7 +28,7 @@ export async function sendVerificationEmail(to: string, url: string): Promise<bo
   const resend = getResendClient();
 
   if (!transporter && !resend) {
-    logger.info({ to, url }, "Simulating verification email delivery (No email provider configured)");
+    logger.warn({ to, url }, "Simulating verification email delivery: No email provider configured (Set SMTP_USER/SMTP_PASS or RESEND_API_KEY to send real emails)");
     return true;
   }
 
@@ -82,7 +82,7 @@ export async function sendPasswordResetEmail(to: string, url: string): Promise<b
   const resend = getResendClient();
 
   if (!transporter && !resend) {
-    logger.info({ to, url }, "Simulating password reset email delivery (No email provider configured)");
+    logger.warn({ to, url }, "Simulating password reset email delivery: No email provider configured (Set SMTP_USER/SMTP_PASS or RESEND_API_KEY to send real emails)");
     return true;
   }
 
