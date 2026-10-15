@@ -164,7 +164,8 @@ export function createRateLimiter(options: RateLimiterOptions): RequestHandler {
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const user = (req as any).user;
-      const ip = req.ip || "unknown";
+      const cfIp = req.headers["cf-connecting-ip"];
+      const ip = (typeof cfIp === "string" ? cfIp : undefined) || req.ip || "unknown";
       const identifier = user?.id ? `${ip}:${user.id}` : ip;
       const key = `${prefix}:${identifier}`;
 

@@ -21,6 +21,8 @@ import { NotFoundError } from "../shared/errors/problem-details";
 export function createApp(): Express {
   const app: Express = express();
 
+  app.set("trust proxy", 1);
+
   initSentry(app);
 
   app.use(securityMiddleware);

@@ -81,7 +81,11 @@ export class TrendingService {
       const quoteMap = new Map(quotes.map((q) => [q.id, q]));
       const orderedQuotes = ids
         .map((id) => quoteMap.get(id))
+<<<<<<< HEAD
         .filter((q): q is (typeof quotes)[number] => q !== undefined);
+=======
+        .filter((q): q is NonNullable<typeof q> => q !== undefined);
+>>>>>>> 7177f20 (Added proxy reverse proxy for cloudflare tunnel)
 
       if (orderedQuotes.length > 0) {
         return orderedQuotes;
