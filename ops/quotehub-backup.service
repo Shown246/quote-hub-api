@@ -1,0 +1,11 @@
+[Unit]
+Description=Quote-Hub PostgreSQL logical backup
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/home/azureuser/quote-hub-api
+ExecStart=/bin/bash /home/azureuser/quote-hub-api/ops/backup-postgres.sh
+UMask=0077

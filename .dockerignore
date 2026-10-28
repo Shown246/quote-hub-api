@@ -1,0 +1,15 @@
+node_modules
+dist
+.git
+.env
+.env.*
+coverage
+tests
+load-tests
+*.log
+*.pem
+*.key
+*.tar.gz
+.agents
+.codex
+.aws

@@ -1,0 +1,92 @@
+name: quotehub
+
+x-app: &app
+  image: quotehub-api:local
+  build: .
+  restart: unless-stopped
+  init: true
+  env_file: .env
+  environment:
+    DATABASE_URL: postgresql://quotehub:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}@postgres:5432/quotehub?connection_limit=5
+    REDIS_URL: redis://redis:6379
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+  logging:
+    driver: local
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+services:
+  postgres:
+    image: postgres:16-bookworm
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: quotehub
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+      POSTGRES_DB: quotehub
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U quotehub -d quotehub"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    logging:
+      driver: local
+
+  redis:
+    image: redis:7-bookworm
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    logging:
+      driver: local
+
+  api:
+    <<: *app
+    command: ["node", "dist/app/server.js"]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4000/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  worker:
+    <<: *app
+    command: ["node", "dist/workers/runner.js"]
+    stop_grace_period: 60s
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    environment:
+      API_HOSTNAME: ${API_HOSTNAME:?Set API_HOSTNAME to the Azure FQDN}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      api:
+        condition: service_healthy
+    logging:
+      driver: local
+
+volumes:
+  postgres_data:
+  redis_data:
+  caddy_data:
+  caddy_config:
