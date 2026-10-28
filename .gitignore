@@ -6,6 +6,10 @@ dist/
 coverage/
 *.log
 .DS_Store
+/docs
+*.pem
+*.key
+quotehub-deploy*.tar.gz
 
 # Load test data and results
 load-tests/data/

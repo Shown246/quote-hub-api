@@ -33,6 +33,8 @@ describe("Resend Email Infrastructure", () => {
       "https://quote-hub.local/reset?token=xyz"
     );
     expect(resetResult).toBe(true);
+    const { logger } = await import("../../../src/infrastructure/logging/logger");
+    expect(JSON.stringify(vi.mocked(logger.warn).mock.calls)).not.toContain("token=");
   });
 
   it("sends verification email using Resend client when configured", async () => {

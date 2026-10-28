@@ -69,17 +69,19 @@ export const auth = betterAuth({
     modelName: "authVerification",
   },
   secret: env.BETTER_AUTH_SECRET,
-  baseURL: {
+  baseURL: env.NODE_ENV === "production" ? env.BETTER_AUTH_URL : {
     allowedHosts,
     fallback: env.BETTER_AUTH_URL,
     protocol: "auto",
   },
   trustedOrigins: [
     env.FRONTEND_ORIGIN,
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-    "https://*.trycloudflare.com",
-    "https://*.vercel.app",
+    ...(env.NODE_ENV === "production" ? [] : [
+      "http://localhost:3000",
+      "http://127.0.0.1:3000",
+      "https://*.trycloudflare.com",
+      "https://*.vercel.app",
+    ]),
   ],
   advanced: {
     trustedProxyHeaders: true,
@@ -96,7 +98,7 @@ export const auth = betterAuth({
       const resetUrl = token
         ? `${frontendOrigin}/reset-password?token=${token}`
         : url;
-      logger.info({ email: user.email, resetUrl }, "Triggering password reset dispatch");
+      logger.info({ email: user.email }, "Triggering password reset dispatch");
       await sendPasswordResetEmail(user.email, resetUrl);
     },
   },
@@ -108,7 +110,7 @@ export const auth = betterAuth({
       const verificationUrl = token
         ? `${frontendOrigin}/verify-email?token=${token}`
         : url;
-      logger.info({ email: user.email, verificationUrl }, "Triggering email verification dispatch");
+      logger.info({ email: user.email }, "Triggering email verification dispatch");
       await sendVerificationEmail(user.email, verificationUrl);
     },
   },

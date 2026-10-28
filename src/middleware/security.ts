@@ -24,8 +24,10 @@ export const helmetMiddleware: RequestHandler = helmet({
       connectSrc: [
         "'self'",
         env.FRONTEND_ORIGIN,
-        "https://*.trycloudflare.com",
-        "https://*.vercel.app",
+        ...(env.NODE_ENV === "production" ? [] : [
+          "https://*.trycloudflare.com",
+          "https://*.vercel.app",
+        ]),
       ],
       upgradeInsecureRequests: [],
     },
@@ -40,13 +42,19 @@ export const helmetMiddleware: RequestHandler = helmet({
 
 export const ALLOWED_ORIGINS = new Set([
   env.FRONTEND_ORIGIN,
-  "http://localhost:3000",
-  "http://127.0.0.1:3000",
+  ...(env.NODE_ENV === "production" ? [] : [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+  ]),
 ]);
 
 export function isAllowedOrigin(origin: string): boolean {
   if (ALLOWED_ORIGINS.has(origin)) {
     return true;
+  }
+
+  if (env.NODE_ENV === "production") {
+    return false;
   }
 
   try {
